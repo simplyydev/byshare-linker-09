@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { FileDropzone } from '@/components/ui/FileDropzone';
 import { ShareOptions } from '@/components/ui/ShareOptions';
 import { FileLink } from '@/components/ui/FileLink';
+import { UserHistoryCard } from '@/components/ui/UserHistoryCard';
 import { uploadFile, loadSettings, getUploadCountForToday } from '@/lib/fileService';
 import { Layout } from '@/components/Layout';
 import { toast } from 'sonner';
@@ -100,7 +101,7 @@ const Upload = () => {
 
   return (
     <Layout>
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="max-w-6xl mx-auto px-4 py-8">
         <div className="text-center mb-8 animate-fade-in">
           <h1 className="text-3xl md:text-4xl font-bold mb-4 text-gradient">
             Partager un fichier
@@ -134,8 +135,8 @@ const Upload = () => {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-6">
               <div className="glass rounded-2xl p-6 animate-fade-in">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center">
@@ -158,39 +159,41 @@ const Upload = () => {
               </div>
               
               {file && (
-                <button
-                  onClick={handleUpload}
-                  disabled={isUploading || uploadsToday >= MAX_UPLOADS_PER_DAY}
-                  className="w-full bg-primary text-primary-foreground py-3 px-6 rounded-xl flex items-center justify-center font-medium btn-hover-effect disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isUploading ? (
-                    <>
-                      <div className="animate-spin mr-2">
-                        <RefreshCw className="h-5 w-5" />
-                      </div>
-                      Téléchargement...
-                    </>
-                  ) : (
-                    <>
-                      <Share className="h-5 w-5 mr-2" />
-                      Générer un lien de partage
-                    </>
-                  )}
-                </button>
+                <>
+                  <button
+                    onClick={handleUpload}
+                    disabled={isUploading || uploadsToday >= MAX_UPLOADS_PER_DAY}
+                    className="w-full bg-primary text-primary-foreground py-3 px-6 rounded-xl flex items-center justify-center font-medium btn-hover-effect disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isUploading ? (
+                      <>
+                        <div className="animate-spin mr-2">
+                          <RefreshCw className="h-5 w-5" />
+                        </div>
+                        Téléchargement...
+                      </>
+                    ) : (
+                      <>
+                        <Share className="h-5 w-5 mr-2" />
+                        Générer un lien de partage
+                      </>
+                    )}
+                  </button>
+                  
+                  <div className="glass rounded-2xl p-6">
+                    <div className="flex items-center mb-4">
+                      <Shield className="h-5 w-5 text-primary mr-2" />
+                      <h2 className="text-xl font-medium">Options de sécurité</h2>
+                    </div>
+                    <ShareOptions onOptionsChange={handleOptionsChange} />
+                  </div>
+                </>
               )}
             </div>
             
-            {file && (
-              <div className="space-y-6 animate-slide-up">
-                <div className="glass rounded-2xl p-6">
-                  <div className="flex items-center mb-4">
-                    <Shield className="h-5 w-5 text-primary mr-2" />
-                    <h2 className="text-xl font-medium">Options de sécurité</h2>
-                  </div>
-                  <ShareOptions onOptionsChange={handleOptionsChange} />
-                </div>
-              </div>
-            )}
+            <div className="space-y-6 animate-slide-up">
+              <UserHistoryCard />
+            </div>
           </div>
         )}
       </div>

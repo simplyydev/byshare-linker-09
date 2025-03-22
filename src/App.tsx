@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/hooks/use-theme";
 import Index from "./pages/Index";
 import Upload from "./pages/Upload";
 import FileView from "./pages/FileView";
+import UserHistory from "./pages/UserHistory";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 
@@ -45,6 +46,7 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/upload" element={<Upload />} />
             <Route path="/files/:id" element={<FileView />} />
+            <Route path="/history" element={<UserHistory />} />
             <Route path="/admin" element={<Admin />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

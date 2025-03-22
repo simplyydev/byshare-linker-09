@@ -1,13 +1,15 @@
 
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { FileDropzone } from '@/components/ui/FileDropzone';
 import { ShareOptions } from '@/components/ui/ShareOptions';
 import { FileLink } from '@/components/ui/FileLink';
 import { uploadFile, loadSettings, getUploadCountForToday } from '@/lib/fileService';
 import { Layout } from '@/components/Layout';
 import { toast } from 'sonner';
-import { FileIcon, Share, Shield, RefreshCw, FolderUp } from 'lucide-react';
+import { FileIcon, Share, Shield, RefreshCw, FolderUp, History } from 'lucide-react';
 import { MAX_UPLOADS_PER_DAY } from '@/lib/constants';
+import { Button } from '@/components/ui/button';
 
 const Upload = () => {
   const [file, setFile] = useState<File | null>(null);
@@ -16,9 +18,11 @@ const Upload = () => {
   const [options, setOptions] = useState<{
     expiryDate: Date | null;
     password: string | null;
+    visibility?: 'public' | 'private';
   }>({
     expiryDate: null,
-    password: null
+    password: null,
+    visibility: 'public'
   });
   const [uploadsToday, setUploadsToday] = useState(0);
   const [isFolder, setIsFolder] = useState(false);
@@ -53,6 +57,7 @@ const Upload = () => {
   const handleOptionsChange = (newOptions: {
     expiryDate: Date | null;
     password: string | null;
+    visibility?: 'public' | 'private';
   }) => {
     setOptions(newOptions);
   };
@@ -87,7 +92,8 @@ const Upload = () => {
     setFileUrl(null);
     setOptions({
       expiryDate: null,
-      password: null
+      password: null,
+      visibility: 'public'
     });
     setIsFolder(false);
   };
@@ -102,6 +108,15 @@ const Upload = () => {
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
             {MAX_UPLOADS_PER_DAY - uploadsToday} téléchargements restants aujourd'hui
           </p>
+          
+          <div className="mt-2">
+            <Link to="/history">
+              <Button variant="outline" className="mt-2">
+                <History className="h-4 w-4 mr-2" />
+                Voir mon historique de partage
+              </Button>
+            </Link>
+          </div>
         </div>
 
         {fileUrl ? (

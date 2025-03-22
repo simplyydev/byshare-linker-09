@@ -16,6 +16,19 @@ export interface FileData {
   reportReasons: string[];
   uploadedBy: string; // IP address or identifier
   folderPath?: string; // For folder uploads
+  visibility?: 'public' | 'private'; // Visibility option
+}
+
+// User history type
+export interface UserUploadHistory {
+  id: string;
+  fileName: string;
+  fileSize: number;
+  fileType: string;
+  uploadDate: string;
+  expiryDate: string | null;
+  hasPassword: boolean;
+  visibility: 'public' | 'private';
 }
 
 // Helper function to generate a unique ID
@@ -36,6 +49,16 @@ const getClientIP = (): string => {
   return ip;
 };
 
+// Generate a unique user ID
+const getUserId = (): string => {
+  let userId = localStorage.getItem('byshare_user_id');
+  if (!userId) {
+    userId = generateId();
+    localStorage.setItem('byshare_user_id', userId);
+  }
+  return userId;
+};
+
 // Load files from localStorage
 const loadFiles = (): FileData[] => {
   const files = localStorage.getItem('byshare_files');
@@ -45,6 +68,85 @@ const loadFiles = (): FileData[] => {
 // Save files to localStorage
 const saveFiles = (files: FileData[]): void => {
   localStorage.setItem('byshare_files', JSON.stringify(files));
+};
+
+// Get user upload history
+export const getUserUploads = (): UserUploadHistory[] => {
+  const userId = getUserId();
+  const history = localStorage.getItem(`byshare_history_${userId}`);
+  return history ? JSON.parse(history) : [];
+};
+
+// Add entry to user upload history
+const addToUserHistory = (file: FileData, url: string): void => {
+  const userId = getUserId();
+  const history = getUserUploads();
+  
+  const historyEntry: UserUploadHistory = {
+    id: file.id,
+    fileName: file.name,
+    fileSize: file.size,
+    fileType: file.type,
+    uploadDate: file.createdAt,
+    expiryDate: file.expiryDate,
+    hasPassword: !!file.password,
+    visibility: file.visibility || 'public'
+  };
+  
+  history.push(historyEntry);
+  localStorage.setItem(`byshare_history_${userId}`, JSON.stringify(history));
+};
+
+// Update file visibility
+export const updateFileVisibility = (
+  fileId: string, 
+  visibility: 'public' | 'private'
+): boolean => {
+  const files = loadFiles();
+  const fileIndex = files.findIndex(f => f.id === fileId);
+  
+  if (fileIndex === -1) return false;
+  
+  files[fileIndex].visibility = visibility;
+  saveFiles(files);
+  
+  // Update history entry
+  const userId = getUserId();
+  const history = getUserUploads();
+  const historyIndex = history.findIndex(h => h.id === fileId);
+  
+  if (historyIndex !== -1) {
+    history[historyIndex].visibility = visibility;
+    localStorage.setItem(`byshare_history_${userId}`, JSON.stringify(history));
+  }
+  
+  return true;
+};
+
+// Update file expiry date
+export const updateFileExpiryDate = (
+  fileId: string, 
+  expiryDate: Date | null
+): boolean => {
+  const files = loadFiles();
+  const fileIndex = files.findIndex(f => f.id === fileId);
+  
+  if (fileIndex === -1) return false;
+  
+  files[fileIndex].expiryDate = expiryDate ? expiryDate.toISOString() : null;
+  saveFiles(files);
+  
+  // Update history entry
+  const userId = getUserId();
+  const history = getUserUploads();
+  const historyIndex = history.findIndex(h => h.id === fileId);
+  
+  if (historyIndex !== -1) {
+    history[historyIndex].expiryDate = expiryDate ? expiryDate.toISOString() : null;
+    localStorage.setItem(`byshare_history_${userId}`, JSON.stringify(history));
+  }
+  
+  return true;
 };
 
 // Get upload count for today
@@ -127,6 +229,15 @@ export const uploadFile = async (
         const id = generateId();
         const ip = getClientIP();
         
+        // Ensure expiry date is within limits (max 1 year)
+        let expiryDate = options.expiryDate;
+        const oneYearFromNow = new Date();
+        oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1);
+        
+        if (expiryDate && expiryDate > oneYearFromNow) {
+          expiryDate = oneYearFromNow;
+        }
+        
         const newFile: FileData = {
           id,
           name: file.name,
@@ -134,12 +245,13 @@ export const uploadFile = async (
           type: file.type,
           content: reader.result as string,
           password: options.password,
-          expiryDate: options.expiryDate ? options.expiryDate.toISOString() : null,
+          expiryDate: expiryDate ? expiryDate.toISOString() : null,
           createdAt: new Date().toISOString(),
           reportCount: 0,
           reportReasons: [],
           uploadedBy: ip,
-          folderPath: file.webkitRelativePath || undefined
+          folderPath: file.webkitRelativePath || undefined,
+          visibility: options.visibility || 'public'
         };
         
         files.push(newFile);
@@ -148,6 +260,9 @@ export const uploadFile = async (
         
         const baseUrl = window.location.origin;
         const url = `${baseUrl}/files/${id}`;
+        
+        // Add to user's upload history
+        addToUserHistory(newFile, url);
         
         resolve({ id, url });
       } catch (error) {
@@ -250,6 +365,17 @@ export const deleteFile = (id: string): boolean => {
   
   files.splice(fileIndex, 1);
   saveFiles(files);
+  
+  // Remove from user history if exists
+  const userId = getUserId();
+  const history = getUserUploads();
+  const historyIndex = history.findIndex(h => h.id === id);
+  
+  if (historyIndex !== -1) {
+    history.splice(historyIndex, 1);
+    localStorage.setItem(`byshare_history_${userId}`, JSON.stringify(history));
+  }
+  
   return true;
 };
 

@@ -8,13 +8,12 @@ export interface FileData {
   name: string;
   size: number;
   type: string;
-  content: string; // Base64 encoded content
   password: string | null;
   expiryDate: string | null; // ISO string
   createdAt: string; // ISO string
   reportCount: number;
   reportReasons: string[];
-  uploadedBy: string; // IP address or identifier
+  uploadedBy: string; // User ID
   folderPath?: string; // For folder uploads
   visibility?: 'public' | 'private'; // Visibility option
 }
@@ -31,130 +30,26 @@ export interface UserUploadHistory {
   visibility: 'public' | 'private';
 }
 
-// Helper function to generate a unique ID
-const generateId = (): string => {
-  return Math.random().toString(36).substring(2, 15) + 
-         Math.random().toString(36).substring(2, 15);
-};
+// API base URL
+const API_BASE_URL = 'http://localhost:3000/api';
 
-// Get client IP (simulated in browser)
-const getClientIP = (): string => {
-  // In a real app, this would be determined server-side
-  // For demo purposes, we'll use a localStorage key
-  let ip = localStorage.getItem('byshare_client_ip');
-  if (!ip) {
-    ip = `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`;
-    localStorage.setItem('byshare_client_ip', ip);
-  }
-  return ip;
-};
-
-// Generate a unique user ID
+// Helper function to generate a unique user ID
 const getUserId = (): string => {
   let userId = localStorage.getItem('byshare_user_id');
   if (!userId) {
-    userId = generateId();
+    userId = Math.random().toString(36).substring(2, 15) + 
+             Math.random().toString(36).substring(2, 15);
     localStorage.setItem('byshare_user_id', userId);
   }
   return userId;
 };
 
-// Load files from localStorage
-const loadFiles = (): FileData[] => {
-  const files = localStorage.getItem('byshare_files');
-  return files ? JSON.parse(files) : [];
-};
-
-// Save files to localStorage
-const saveFiles = (files: FileData[]): void => {
-  localStorage.setItem('byshare_files', JSON.stringify(files));
-};
-
-// Get user upload history
-export const getUserUploads = (): UserUploadHistory[] => {
-  const userId = getUserId();
-  const history = localStorage.getItem(`byshare_history_${userId}`);
-  return history ? JSON.parse(history) : [];
-};
-
-// Add entry to user upload history
-const addToUserHistory = (file: FileData, url: string): void => {
-  const userId = getUserId();
-  const history = getUserUploads();
-  
-  const historyEntry: UserUploadHistory = {
-    id: file.id,
-    fileName: file.name,
-    fileSize: file.size,
-    fileType: file.type,
-    uploadDate: file.createdAt,
-    expiryDate: file.expiryDate,
-    hasPassword: !!file.password,
-    visibility: file.visibility || 'public'
-  };
-  
-  history.push(historyEntry);
-  localStorage.setItem(`byshare_history_${userId}`, JSON.stringify(history));
-};
-
-// Update file visibility
-export const updateFileVisibility = (
-  fileId: string, 
-  visibility: 'public' | 'private'
-): boolean => {
-  const files = loadFiles();
-  const fileIndex = files.findIndex(f => f.id === fileId);
-  
-  if (fileIndex === -1) return false;
-  
-  files[fileIndex].visibility = visibility;
-  saveFiles(files);
-  
-  // Update history entry
-  const userId = getUserId();
-  const history = getUserUploads();
-  const historyIndex = history.findIndex(h => h.id === fileId);
-  
-  if (historyIndex !== -1) {
-    history[historyIndex].visibility = visibility;
-    localStorage.setItem(`byshare_history_${userId}`, JSON.stringify(history));
-  }
-  
-  return true;
-};
-
-// Update file expiry date
-export const updateFileExpiryDate = (
-  fileId: string, 
-  expiryDate: Date | null
-): boolean => {
-  const files = loadFiles();
-  const fileIndex = files.findIndex(f => f.id === fileId);
-  
-  if (fileIndex === -1) return false;
-  
-  files[fileIndex].expiryDate = expiryDate ? expiryDate.toISOString() : null;
-  saveFiles(files);
-  
-  // Update history entry
-  const userId = getUserId();
-  const history = getUserUploads();
-  const historyIndex = history.findIndex(h => h.id === fileId);
-  
-  if (historyIndex !== -1) {
-    history[historyIndex].expiryDate = expiryDate ? expiryDate.toISOString() : null;
-    localStorage.setItem(`byshare_history_${userId}`, JSON.stringify(history));
-  }
-  
-  return true;
-};
-
 // Get upload count for today
 export const getUploadCountForToday = (): number => {
-  const ip = getClientIP();
+  const userId = getUserId();
   const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   
-  const uploadCountKey = `byshare_upload_count_${ip}_${today}`;
+  const uploadCountKey = `byshare_upload_count_${userId}_${today}`;
   const count = localStorage.getItem(uploadCountKey);
   
   return count ? parseInt(count) : 0;
@@ -162,10 +57,10 @@ export const getUploadCountForToday = (): number => {
 
 // Increment upload count
 const incrementUploadCount = (): void => {
-  const ip = getClientIP();
+  const userId = getUserId();
   const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   
-  const uploadCountKey = `byshare_upload_count_${ip}_${today}`;
+  const uploadCountKey = `byshare_upload_count_${userId}_${today}`;
   const currentCount = getUploadCountForToday();
   
   localStorage.setItem(uploadCountKey, (currentCount + 1).toString());
@@ -174,6 +69,23 @@ const incrementUploadCount = (): void => {
 // Check if upload limit reached
 export const isUploadLimitReached = (): boolean => {
   return getUploadCountForToday() >= MAX_UPLOADS_PER_DAY;
+};
+
+// Get user upload history from server
+export const getUserUploads = async (): Promise<UserUploadHistory[]> => {
+  try {
+    const userId = getUserId();
+    const response = await fetch(`${API_BASE_URL}/users/${userId}/uploads`);
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch user uploads');
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching user uploads:', error);
+    return [];
+  }
 };
 
 // Load settings from localStorage
@@ -210,211 +122,214 @@ export const saveSettings = (settings: {
   localStorage.setItem('byshare_settings', JSON.stringify(settings));
 };
 
-// Upload file
+// Upload file to server
 export const uploadFile = async (
   file: File, 
   options: ShareOptions
 ): Promise<{id: string, url: string}> => {
-  return new Promise((resolve, reject) => {
-    if (isUploadLimitReached()) {
-      reject(new Error(`Limite de ${MAX_UPLOADS_PER_DAY} téléchargements par jour atteinte`));
-      return;
-    }
-    
-    const reader = new FileReader();
-    
-    reader.onload = () => {
-      try {
-        const files = loadFiles();
-        const id = generateId();
-        const ip = getClientIP();
-        
-        // Ensure expiry date is within limits (max 1 year)
-        let expiryDate = options.expiryDate;
-        const oneYearFromNow = new Date();
-        oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1);
-        
-        if (expiryDate && expiryDate > oneYearFromNow) {
-          expiryDate = oneYearFromNow;
-        }
-        
-        const newFile: FileData = {
-          id,
-          name: file.name,
-          size: file.size,
-          type: file.type,
-          content: reader.result as string,
-          password: options.password,
-          expiryDate: expiryDate ? expiryDate.toISOString() : null,
-          createdAt: new Date().toISOString(),
-          reportCount: 0,
-          reportReasons: [],
-          uploadedBy: ip,
-          folderPath: file.webkitRelativePath || undefined,
-          visibility: options.visibility || 'public'
-        };
-        
-        files.push(newFile);
-        saveFiles(files);
-        incrementUploadCount();
-        
-        const baseUrl = window.location.origin;
-        const url = `${baseUrl}/files/${id}`;
-        
-        // Add to user's upload history
-        addToUserHistory(newFile, url);
-        
-        resolve({ id, url });
-      } catch (error) {
-        reject(error);
-      }
-    };
-    
-    reader.onerror = () => {
-      reject(new Error('Failed to read file'));
-    };
-    
-    reader.readAsDataURL(file);
-  });
-};
-
-// Get file metadata (without content)
-export const getFileMetadata = (id: string): Omit<FileData, 'content' | 'password'> | null => {
-  const files = loadFiles();
-  const file = files.find(f => f.id === id);
-  
-  if (!file) return null;
-  
-  // Check if file has expired
-  if (file.expiryDate) {
-    const expiryDate = new Date(file.expiryDate);
-    if (expiryDate < new Date()) {
-      // File has expired, delete it
-      deleteFile(id);
-      return null;
-    }
+  if (isUploadLimitReached()) {
+    throw new Error(`Limite de ${MAX_UPLOADS_PER_DAY} téléchargements par jour atteinte`);
   }
   
-  const { content, password, ...metadata } = file;
-  return metadata;
+  const formData = new FormData();
+  formData.append('file', file);
+  
+  const userId = getUserId();
+  formData.append('userId', userId);
+  
+  if (options.expiryDate) {
+    formData.append('expiryDate', options.expiryDate.toISOString());
+  }
+  
+  if (options.password) {
+    formData.append('password', options.password);
+  }
+  
+  if (options.visibility) {
+    formData.append('visibility', options.visibility);
+  }
+  
+  if (file.webkitRelativePath) {
+    formData.append('folderPath', file.webkitRelativePath);
+  }
+  
+  try {
+    const response = await fetch(`${API_BASE_URL}/upload`, {
+      method: 'POST',
+      body: formData
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Upload failed');
+    }
+    
+    const result = await response.json();
+    incrementUploadCount();
+    
+    return { 
+      id: result.id, 
+      url: `${window.location.origin}/files/${result.id}` 
+    };
+  } catch (error) {
+    console.error('Upload error:', error);
+    throw error;
+  }
+};
+
+// Get file metadata from server
+export const getFileMetadata = async (id: string): Promise<Omit<FileData, 'content' | 'password'> | null> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/files/${id}/metadata`);
+    
+    if (!response.ok) {
+      return null;
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching file metadata:', error);
+    return null;
+  }
 };
 
 // Check if file is password protected
-export const isFilePasswordProtected = (id: string): boolean => {
-  const files = loadFiles();
-  const file = files.find(f => f.id === id);
-  return !!file?.password;
+export const isFilePasswordProtected = async (id: string): Promise<boolean> => {
+  try {
+    const metadata = await getFileMetadata(id);
+    return metadata ? !!metadata.password : false;
+  } catch (error) {
+    console.error('Error checking if file is password protected:', error);
+    return false;
+  }
 };
 
-// Verify file password
-export const verifyFilePassword = (id: string, password: string): boolean => {
-  const files = loadFiles();
-  const file = files.find(f => f.id === id);
-  
-  if (!file || !file.password) return false;
-  return file.password === password;
-};
-
-// Get file content
-export const getFileContent = (id: string, password?: string): string | null => {
-  const files = loadFiles();
-  const file = files.find(f => f.id === id);
-  
-  if (!file) return null;
-  
-  // Check if file has expired
-  if (file.expiryDate) {
-    const expiryDate = new Date(file.expiryDate);
-    if (expiryDate < new Date()) {
-      // File has expired, delete it
-      deleteFile(id);
+// Get file content from server
+export const getFileContent = async (id: string, password?: string): Promise<string | null> => {
+  try {
+    let url = `${API_BASE_URL}/files/${id}/download`;
+    
+    if (password) {
+      url += `?password=${encodeURIComponent(password)}`;
+    }
+    
+    const response = await fetch(url);
+    
+    if (!response.ok) {
       return null;
     }
-  }
-  
-  // Check password if file is password protected
-  if (file.password && password !== file.password) {
+    
+    const blob = await response.blob();
+    return URL.createObjectURL(blob);
+  } catch (error) {
+    console.error('Error fetching file content:', error);
     return null;
   }
-  
-  return file.content;
 };
 
-// Generate file preview
-export const generateFilePreview = (file: FileData): string | null => {
-  // For images, just return the content
-  if (file.type.startsWith('image/')) {
-    return file.content;
+// Delete file from server
+export const deleteFile = async (id: string): Promise<boolean> => {
+  try {
+    const userId = getUserId();
+    const response = await fetch(`${API_BASE_URL}/files/${id}?userId=${userId}`, {
+      method: 'DELETE'
+    });
+    
+    return response.ok;
+  } catch (error) {
+    console.error('Error deleting file:', error);
+    return false;
   }
-  
-  // For PDFs, videos, and audio, return content as is (browser can render them)
-  if (file.type === 'application/pdf' || file.type.startsWith('video/') || file.type.startsWith('audio/')) {
-    return file.content;
-  }
-  
-  // For other types, return null - no preview available
-  return null;
 };
 
-// Delete file
-export const deleteFile = (id: string): boolean => {
-  const files = loadFiles();
-  const fileIndex = files.findIndex(f => f.id === id);
-  
-  if (fileIndex === -1) return false;
-  
-  files.splice(fileIndex, 1);
-  saveFiles(files);
-  
-  // Remove from user history if exists
-  const userId = getUserId();
-  const history = getUserUploads();
-  const historyIndex = history.findIndex(h => h.id === id);
-  
-  if (historyIndex !== -1) {
-    history.splice(historyIndex, 1);
-    localStorage.setItem(`byshare_history_${userId}`, JSON.stringify(history));
+// Update file visibility on server
+export const updateFileVisibility = async (
+  fileId: string, 
+  visibility: 'public' | 'private'
+): Promise<boolean> => {
+  try {
+    const userId = getUserId();
+    const response = await fetch(`${API_BASE_URL}/files/${fileId}/visibility`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        visibility,
+        userId
+      })
+    });
+    
+    return response.ok;
+  } catch (error) {
+    console.error('Error updating file visibility:', error);
+    return false;
   }
-  
-  return true;
+};
+
+// Update file expiry date on server
+export const updateFileExpiryDate = async (
+  fileId: string, 
+  expiryDate: Date | null
+): Promise<boolean> => {
+  try {
+    const userId = getUserId();
+    const response = await fetch(`${API_BASE_URL}/files/${fileId}/expiry`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        expiryDate: expiryDate ? expiryDate.toISOString() : null,
+        userId
+      })
+    });
+    
+    return response.ok;
+  } catch (error) {
+    console.error('Error updating file expiry date:', error);
+    return false;
+  }
 };
 
 // Report file
-export const reportFile = (id: string, reason: string): boolean => {
-  const files = loadFiles();
-  const fileIndex = files.findIndex(f => f.id === id);
-  
-  if (fileIndex === -1) return false;
-  
-  files[fileIndex].reportCount++;
-  files[fileIndex].reportReasons.push(reason);
-  
-  saveFiles(files);
-  return true;
+export const reportFile = async (id: string, reason: string): Promise<boolean> => {
+  // Not implemented in this version
+  return false;
 };
 
 // Get all files (admin function)
-export const getAllFiles = (): Omit<FileData, 'content'>[] => {
-  const files = loadFiles();
-  return files.map(({ content, ...file }) => file);
+export const getAllFiles = async (): Promise<Omit<FileData, 'content'>[]> => {
+  // Not implemented in this version
+  return [];
 };
 
 // Calculate total storage usage in bytes
-export const getTotalStorageUsage = (): number => {
-  const files = loadFiles();
-  return files.reduce((total, file) => total + file.size, 0);
+export const getTotalStorageUsage = async (): Promise<number> => {
+  // Not implemented in this version
+  return 0;
 };
 
 // Verify admin credentials
 export const verifyAdminCredentials = (username: string, password: string): boolean => {
   // In a real app, this would check against a securely stored credential
   // For demo purposes, we'll use hardcoded values (very insecure!)
-  const storedCredentials = localStorage.getItem('byshare_admin_credentials');
-  if (storedCredentials) {
-    const creds = JSON.parse(storedCredentials);
-    return creds.username === username && creds.password === password;
-  }
-  
-  // Default admin credentials (these would normally be environment variables)
   return username === 'admin' && password === 'byshare2024';
+};
+
+// Verify file password
+export const verifyFilePassword = async (id: string, password: string): Promise<boolean> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/files/${id}/download?password=${encodeURIComponent(password)}`);
+    return response.ok;
+  } catch (error) {
+    console.error('Error verifying file password:', error);
+    return false;
+  }
+};
+
+// Generate file preview
+export const generateFilePreview = async (fileId: string): Promise<string | null> => {
+  // For this implementation, we'll just return the download URL
+  return `${API_BASE_URL}/files/${fileId}/download`;
 };

@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { FileDropzone } from '@/components/ui/FileDropzone';
@@ -37,7 +36,6 @@ const Upload = () => {
 
   const handleFileSelect = (selectedFile: File) => {
     setFile(selectedFile);
-    // Reset file URL if a new file is selected
     if (fileUrl) {
       setFileUrl(null);
     }
@@ -49,8 +47,6 @@ const Upload = () => {
       return;
     }
     
-    // For demonstration, we'll just select the first file for now
-    // In a complete implementation, you would handle multiple files
     handleFileSelect(files[0]);
     setIsFolder(true);
   };

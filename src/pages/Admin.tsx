@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
@@ -16,7 +15,8 @@ import {
   Download, 
   Search, 
   Calendar,
-  Flag
+  Flag,
+  X
 } from 'lucide-react';
 
 const Admin = () => {

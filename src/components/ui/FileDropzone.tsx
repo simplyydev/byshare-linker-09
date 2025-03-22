@@ -1,10 +1,13 @@
 
 import { useCallback, useState } from 'react';
-import { Upload, X, Check, Image, File as FileIcon, Film, Music, Archive, FileText, Download, Lock } from 'lucide-react';
+import { Upload, X, Check, Image, File as FileIcon, Film, Music, Archive, FileText, Download, Lock, FolderUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Switch } from './switch';
+import { Label } from './label';
 
 interface FileDropzoneProps {
   onFileSelect: (file: File) => void;
+  onFolderSelect?: (files: File[]) => void;
   maxSizeMB?: number;
   acceptedFileTypes?: string[];
   className?: string;
@@ -12,6 +15,7 @@ interface FileDropzoneProps {
 
 export function FileDropzone({ 
   onFileSelect, 
+  onFolderSelect,
   maxSizeMB = 100, 
   acceptedFileTypes = [], 
   className 
@@ -19,6 +23,7 @@ export function FileDropzone({
   const [isDragActive, setIsDragActive] = useState(false);
   const [filePreview, setFilePreview] = useState<{ file: File; previewUrl?: string } | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isFolderMode, setIsFolderMode] = useState(false);
 
   const handleDrag = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -94,10 +99,22 @@ export function FileDropzone({
   const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
     
-    if (e.target.files && e.target.files[0]) {
-      processFile(e.target.files[0]);
+    if (e.target.files && e.target.files.length > 0) {
+      if (isFolderMode && onFolderSelect) {
+        // Handle folder upload
+        const files = Array.from(e.target.files);
+        onFolderSelect(files);
+        
+        // For preview, show the first file
+        if (files.length > 0) {
+          processFile(files[0]);
+        }
+      } else {
+        // Handle single file upload
+        processFile(e.target.files[0]);
+      }
     }
-  }, [processFile]);
+  }, [processFile, isFolderMode, onFolderSelect]);
 
   const handleRemoveFile = useCallback(() => {
     setFilePreview(null);
@@ -158,55 +175,79 @@ export function FileDropzone({
           </div>
         </div>
       ) : (
-        <div
-          onDragEnter={handleDrag}
-          onDragLeave={handleDrag}
-          onDragOver={handleDrag}
-          onDrop={handleDrop}
-          className={cn(
-            "dropzone glass rounded-2xl p-8 text-center cursor-pointer transition-all flex flex-col items-center justify-center min-h-[300px]",
-            isDragActive && "active",
-            errorMessage && "border-destructive/50",
-            className
-          )}
-        >
-          <input
-            id="fileInput"
-            type="file"
-            className="hidden"
-            onChange={handleChange}
-            accept={acceptedFileTypes.join(',')}
-          />
-          
-          <label htmlFor="fileInput" className="cursor-pointer w-full h-full flex flex-col items-center justify-center">
-            <div className={cn(
-              "h-16 w-16 rounded-full glass-subtle flex items-center justify-center mb-4 transition-transform duration-300",
-              isDragActive ? "scale-110" : "animate-float"
-            )}>
-              <Upload className="h-8 w-8 text-primary" />
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="folder-mode"
+                checked={isFolderMode}
+                onCheckedChange={setIsFolderMode}
+              />
+              <Label htmlFor="folder-mode" className="cursor-pointer">
+                {isFolderMode ? 'Mode dossier activé' : 'Mode fichier unique'}
+              </Label>
             </div>
-            
-            <h3 className="text-xl font-medium mb-2">
-              {isDragActive ? "Déposez votre fichier ici" : "Glissez-déposez votre fichier ici"}
-            </h3>
-            
-            <p className="text-muted-foreground mb-4 max-w-sm">
-              ou <span className="text-primary font-medium">parcourez</span> vos fichiers
-              {acceptedFileTypes.length > 0 && (
-                <> (formats acceptés: {acceptedFileTypes.join(', ')})</>
-              )}
-            </p>
-            
-            <p className="text-sm text-muted-foreground">
-              Taille maximale: {maxSizeMB}MB
-            </p>
-            
-            {errorMessage && (
-              <div className="mt-4 text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-lg">
-                {errorMessage}
-              </div>
+          </div>
+          
+          <div
+            onDragEnter={handleDrag}
+            onDragLeave={handleDrag}
+            onDragOver={handleDrag}
+            onDrop={handleDrop}
+            className={cn(
+              "dropzone glass rounded-2xl p-8 text-center cursor-pointer transition-all flex flex-col items-center justify-center min-h-[300px]",
+              isDragActive && "active",
+              errorMessage && "border-destructive/50",
+              className
             )}
-          </label>
+          >
+            <input
+              id="fileInput"
+              type="file"
+              className="hidden"
+              onChange={handleChange}
+              accept={acceptedFileTypes.join(',')}
+              {...(isFolderMode ? { webkitdirectory: "", directory: "" } : {})}
+            />
+            
+            <label htmlFor="fileInput" className="cursor-pointer w-full h-full flex flex-col items-center justify-center">
+              <div className={cn(
+                "h-16 w-16 rounded-full glass-subtle flex items-center justify-center mb-4 transition-transform duration-300",
+                isDragActive ? "scale-110" : "animate-float"
+              )}>
+                {isFolderMode ? (
+                  <FolderUp className="h-8 w-8 text-primary" />
+                ) : (
+                  <Upload className="h-8 w-8 text-primary" />
+                )}
+              </div>
+              
+              <h3 className="text-xl font-medium mb-2">
+                {isDragActive 
+                  ? "Déposez votre fichier ici" 
+                  : isFolderMode 
+                    ? "Glissez-déposez votre dossier ici"
+                    : "Glissez-déposez votre fichier ici"}
+              </h3>
+              
+              <p className="text-muted-foreground mb-4 max-w-sm">
+                ou <span className="text-primary font-medium">parcourez</span> vos {isFolderMode ? 'dossiers' : 'fichiers'}
+                {acceptedFileTypes.length > 0 && !isFolderMode && (
+                  <> (formats acceptés: {acceptedFileTypes.join(', ')})</>
+                )}
+              </p>
+              
+              <p className="text-sm text-muted-foreground">
+                Taille maximale: {maxSizeMB}MB
+              </p>
+              
+              {errorMessage && (
+                <div className="mt-4 text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-lg">
+                  {errorMessage}
+                </div>
+              )}
+            </label>
+          </div>
         </div>
       )}
     </div>

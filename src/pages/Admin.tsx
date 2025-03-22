@@ -1,10 +1,18 @@
+
 import { useState, useEffect } from 'react';
 import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { getAllFiles, getTotalStorageUsage, deleteFile, loadSettings, saveSettings } from '@/lib/fileService';
+import { 
+  getAllFiles, 
+  getTotalStorageUsage, 
+  deleteFile, 
+  loadSettings, 
+  saveSettings,
+  verifyAdminCredentials
+} from '@/lib/fileService';
 import { toast } from 'sonner';
 import { 
   FileText, 
@@ -16,8 +24,12 @@ import {
   Search, 
   Calendar,
   Flag,
-  X
+  X,
+  Lock,
+  LogIn
 } from 'lucide-react';
+import { ADMIN_CREDENTIALS } from '@/lib/constants';
+import { useNavigate } from 'react-router-dom';
 
 const Admin = () => {
   const [files, setFiles] = useState<Array<{
@@ -29,6 +41,7 @@ const Admin = () => {
     createdAt: string;
     reportCount: number;
     reportReasons: string[];
+    uploadedBy: string;
   }>>([]);
   
   const [totalSize, setTotalSize] = useState(0);
@@ -39,6 +52,13 @@ const Admin = () => {
   });
   const [newFileType, setNewFileType] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loginCredentials, setLoginCredentials] = useState({
+    username: '',
+    password: ''
+  });
+  
+  const navigate = useNavigate();
 
   const loadData = () => {
     setIsLoading(true);
@@ -49,8 +69,13 @@ const Admin = () => {
     setIsLoading(false);
   };
 
+  // Check if user is already authenticated
   useEffect(() => {
-    loadData();
+    const adminAuth = localStorage.getItem('byshare_admin_auth');
+    if (adminAuth === 'true') {
+      setIsAuthenticated(true);
+      loadData();
+    }
   }, []);
 
   const handleDeleteFile = (id: string) => {
@@ -91,6 +116,23 @@ const Admin = () => {
     }));
   };
 
+  const handleLogin = () => {
+    if (verifyAdminCredentials(loginCredentials.username, loginCredentials.password)) {
+      setIsAuthenticated(true);
+      localStorage.setItem('byshare_admin_auth', 'true');
+      toast.success('Connexion réussie');
+      loadData();
+    } else {
+      toast.error('Identifiants incorrects');
+    }
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    localStorage.removeItem('byshare_admin_auth');
+    navigate('/');
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString();
   };
@@ -108,10 +150,77 @@ const Admin = () => {
 
   const reportedFiles = files.filter(file => file.reportCount > 0);
 
+  if (!isAuthenticated) {
+    return (
+      <Layout>
+        <div className="container max-w-md mx-auto py-12">
+          <div className="glass rounded-2xl p-8">
+            <div className="flex items-center justify-center mb-6">
+              <Lock className="h-6 w-6 text-primary mr-2" />
+              <h1 className="text-2xl font-bold">Accès administrateur</h1>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="username">Nom d'utilisateur</Label>
+                <Input 
+                  id="username"
+                  type="text"
+                  placeholder="admin"
+                  value={loginCredentials.username}
+                  onChange={(e) => setLoginCredentials(prev => ({
+                    ...prev,
+                    username: e.target.value
+                  }))}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="password">Mot de passe</Label>
+                <Input 
+                  id="password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={loginCredentials.password}
+                  onChange={(e) => setLoginCredentials(prev => ({
+                    ...prev,
+                    password: e.target.value
+                  }))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleLogin();
+                    }
+                  }}
+                />
+              </div>
+              
+              <Button 
+                className="w-full btn-hover-effect" 
+                onClick={handleLogin}
+              >
+                <LogIn className="h-4 w-4 mr-2" />
+                Se connecter
+              </Button>
+              
+              <p className="text-sm text-muted-foreground text-center mt-4">
+                Identifiants par défaut: admin / byshare2024
+              </p>
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
   return (
     <Layout>
       <div className="container mx-auto py-6">
-        <h1 className="text-3xl font-bold mb-6">Panneau d'administration</h1>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-3xl font-bold">Panneau d'administration</h1>
+          <Button variant="outline" onClick={handleLogout}>
+            Déconnexion
+          </Button>
+        </div>
         
         <Tabs defaultValue="files" className="space-y-6">
           <TabsList className="glass-subtle mb-4">
@@ -166,6 +275,7 @@ const Admin = () => {
                         <th className="text-left py-3 px-4">Nom</th>
                         <th className="text-left py-3 px-4">Type</th>
                         <th className="text-left py-3 px-4">Taille</th>
+                        <th className="text-left py-3 px-4">IP</th>
                         <th className="text-left py-3 px-4">Date de création</th>
                         <th className="text-left py-3 px-4">Expiration</th>
                         <th className="text-left py-3 px-4">Actions</th>
@@ -177,6 +287,7 @@ const Admin = () => {
                           <td className="py-3 px-4 truncate max-w-[200px]">{file.name}</td>
                           <td className="py-3 px-4">{file.type}</td>
                           <td className="py-3 px-4">{formatSize(file.size)}</td>
+                          <td className="py-3 px-4">{file.uploadedBy}</td>
                           <td className="py-3 px-4">{formatDate(file.createdAt)}</td>
                           <td className="py-3 px-4">
                             {file.expiryDate ? formatDate(file.expiryDate) : 'Pas d\'expiration'}

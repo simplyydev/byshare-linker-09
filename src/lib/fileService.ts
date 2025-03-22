@@ -1,5 +1,6 @@
 
 import { ShareOptions } from '@/components/ui/ShareOptions';
+import { MAX_UPLOADS_PER_DAY } from './constants';
 
 // Type definitions
 export interface FileData {
@@ -13,12 +14,26 @@ export interface FileData {
   createdAt: string; // ISO string
   reportCount: number;
   reportReasons: string[];
+  uploadedBy: string; // IP address or identifier
+  folderPath?: string; // For folder uploads
 }
 
 // Helper function to generate a unique ID
 const generateId = (): string => {
   return Math.random().toString(36).substring(2, 15) + 
          Math.random().toString(36).substring(2, 15);
+};
+
+// Get client IP (simulated in browser)
+const getClientIP = (): string => {
+  // In a real app, this would be determined server-side
+  // For demo purposes, we'll use a localStorage key
+  let ip = localStorage.getItem('byshare_client_ip');
+  if (!ip) {
+    ip = `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`;
+    localStorage.setItem('byshare_client_ip', ip);
+  }
+  return ip;
 };
 
 // Load files from localStorage
@@ -30,6 +45,33 @@ const loadFiles = (): FileData[] => {
 // Save files to localStorage
 const saveFiles = (files: FileData[]): void => {
   localStorage.setItem('byshare_files', JSON.stringify(files));
+};
+
+// Get upload count for today
+export const getUploadCountForToday = (): number => {
+  const ip = getClientIP();
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  
+  const uploadCountKey = `byshare_upload_count_${ip}_${today}`;
+  const count = localStorage.getItem(uploadCountKey);
+  
+  return count ? parseInt(count) : 0;
+};
+
+// Increment upload count
+const incrementUploadCount = (): void => {
+  const ip = getClientIP();
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  
+  const uploadCountKey = `byshare_upload_count_${ip}_${today}`;
+  const currentCount = getUploadCountForToday();
+  
+  localStorage.setItem(uploadCountKey, (currentCount + 1).toString());
+};
+
+// Check if upload limit reached
+export const isUploadLimitReached = (): boolean => {
+  return getUploadCountForToday() >= MAX_UPLOADS_PER_DAY;
 };
 
 // Load settings from localStorage
@@ -72,12 +114,18 @@ export const uploadFile = async (
   options: ShareOptions
 ): Promise<{id: string, url: string}> => {
   return new Promise((resolve, reject) => {
+    if (isUploadLimitReached()) {
+      reject(new Error(`Limite de ${MAX_UPLOADS_PER_DAY} téléchargements par jour atteinte`));
+      return;
+    }
+    
     const reader = new FileReader();
     
     reader.onload = () => {
       try {
         const files = loadFiles();
         const id = generateId();
+        const ip = getClientIP();
         
         const newFile: FileData = {
           id,
@@ -89,11 +137,14 @@ export const uploadFile = async (
           expiryDate: options.expiryDate ? options.expiryDate.toISOString() : null,
           createdAt: new Date().toISOString(),
           reportCount: 0,
-          reportReasons: []
+          reportReasons: [],
+          uploadedBy: ip,
+          folderPath: file.webkitRelativePath || undefined
         };
         
         files.push(newFile);
         saveFiles(files);
+        incrementUploadCount();
         
         const baseUrl = window.location.origin;
         const url = `${baseUrl}/files/${id}`;
@@ -174,6 +225,22 @@ export const getFileContent = (id: string, password?: string): string | null => 
   return file.content;
 };
 
+// Generate file preview
+export const generateFilePreview = (file: FileData): string | null => {
+  // For images, just return the content
+  if (file.type.startsWith('image/')) {
+    return file.content;
+  }
+  
+  // For PDFs, videos, and audio, return content as is (browser can render them)
+  if (file.type === 'application/pdf' || file.type.startsWith('video/') || file.type.startsWith('audio/')) {
+    return file.content;
+  }
+  
+  // For other types, return null - no preview available
+  return null;
+};
+
 // Delete file
 export const deleteFile = (id: string): boolean => {
   const files = loadFiles();
@@ -210,4 +277,18 @@ export const getAllFiles = (): Omit<FileData, 'content'>[] => {
 export const getTotalStorageUsage = (): number => {
   const files = loadFiles();
   return files.reduce((total, file) => total + file.size, 0);
+};
+
+// Verify admin credentials
+export const verifyAdminCredentials = (username: string, password: string): boolean => {
+  // In a real app, this would check against a securely stored credential
+  // For demo purposes, we'll use hardcoded values (very insecure!)
+  const storedCredentials = localStorage.getItem('byshare_admin_credentials');
+  if (storedCredentials) {
+    const creds = JSON.parse(storedCredentials);
+    return creds.username === username && creds.password === password;
+  }
+  
+  // Default admin credentials (these would normally be environment variables)
+  return username === 'admin' && password === 'byshare2024';
 };

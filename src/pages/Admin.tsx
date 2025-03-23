@@ -28,22 +28,22 @@ import {
   Lock,
   LogIn
 } from 'lucide-react';
-import { ADMIN_CREDENTIALS } from '@/lib/constants';
 import { useNavigate } from 'react-router-dom';
 
+interface AdminFile {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  expiryDate: string | null;
+  createdAt: string;
+  reportCount: number;
+  reportReasons: string[];
+  uploadedBy: string;
+}
+
 const Admin = () => {
-  const [files, setFiles] = useState<Array<{
-    id: string;
-    name: string;
-    size: number;
-    type: string;
-    expiryDate: string | null;
-    createdAt: string;
-    reportCount: number;
-    reportReasons: string[];
-    uploadedBy: string;
-  }>>([]);
-  
+  const [files, setFiles] = useState<AdminFile[]>([]);
   const [totalSize, setTotalSize] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [settings, setSettings] = useState({
@@ -60,13 +60,22 @@ const Admin = () => {
   
   const navigate = useNavigate();
 
-  const loadData = () => {
+  const loadData = async () => {
     setIsLoading(true);
-    const allFiles = getAllFiles();
-    setFiles(allFiles);
-    setTotalSize(getTotalStorageUsage());
-    setSettings(loadSettings());
-    setIsLoading(false);
+    try {
+      // Properly await the async functions
+      const allFiles = await getAllFiles();
+      const storageUsage = await getTotalStorageUsage();
+      
+      setFiles(allFiles as AdminFile[]);
+      setTotalSize(storageUsage);
+      setSettings(loadSettings());
+    } catch (error) {
+      console.error('Error loading admin data:', error);
+      toast.error('Erreur lors du chargement des données');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Check if user is already authenticated
@@ -75,12 +84,15 @@ const Admin = () => {
     if (adminAuth === 'true') {
       setIsAuthenticated(true);
       loadData();
+    } else {
+      setIsLoading(false);
     }
   }, []);
 
-  const handleDeleteFile = (id: string) => {
+  const handleDeleteFile = async (id: string) => {
     if (window.confirm('Êtes-vous sûr de vouloir supprimer ce fichier ?')) {
-      const success = deleteFile(id);
+      // Properly await the async function
+      const success = await deleteFile(id);
       if (success) {
         toast.success('Fichier supprimé avec succès');
         loadData();

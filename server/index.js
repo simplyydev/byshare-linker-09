@@ -61,8 +61,8 @@ try {
 // CORS configuration for the storage directory
 app.use('/storage', express.static(storageDir));
 
-// Upload endpoint
-app.post('/api/upload', upload.single('file'), (req, file, res) => {
+// Upload endpoint - Fixed the parameters order
+app.post('/api/upload', upload.single('file'), (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
@@ -119,6 +119,44 @@ app.post('/api/upload', upload.single('file'), (req, file, res) => {
     console.error('Upload error:', error);
     res.status(500).json({ error: 'File upload failed' });
   }
+});
+
+// File reporting endpoint
+app.post('/api/files/:id/report', (req, res) => {
+  const fileId = req.params.id;
+  const { reason } = req.body;
+  
+  const fileIndex = filesDatabase.findIndex(f => f.id === fileId);
+  
+  if (fileIndex === -1) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+  
+  // Add report to file
+  filesDatabase[fileIndex].reportCount += 1;
+  if (reason) {
+    filesDatabase[fileIndex].reportReasons.push(reason);
+  }
+  
+  saveDatabase();
+  
+  res.json({ success: true });
+});
+
+// Get all files endpoint (admin)
+app.get('/api/files', (req, res) => {
+  res.json(filesDatabase);
+});
+
+// Get storage usage endpoint (admin)
+app.get('/api/storage/usage', (req, res) => {
+  let totalSize = 0;
+  
+  filesDatabase.forEach(file => {
+    totalSize += file.size;
+  });
+  
+  res.json({ usage: totalSize });
 });
 
 // Get file metadata

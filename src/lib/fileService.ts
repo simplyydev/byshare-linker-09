@@ -71,7 +71,7 @@ export const isUploadLimitReached = (): boolean => {
   return getUploadCountForToday() >= MAX_UPLOADS_PER_DAY;
 };
 
-// Get user upload history from server
+// Get user upload history from server - this now properly returns a Promise
 export const getUserUploads = async (): Promise<UserUploadHistory[]> => {
   try {
     const userId = getUserId();
@@ -178,7 +178,7 @@ export const uploadFile = async (
 };
 
 // Get file metadata from server
-export const getFileMetadata = async (id: string): Promise<Omit<FileData, 'content' | 'password'> | null> => {
+export const getFileMetadata = async (id: string): Promise<Omit<FileData, 'password'> | null> => {
   try {
     const response = await fetch(`${API_BASE_URL}/files/${id}/metadata`);
     
@@ -197,7 +197,8 @@ export const getFileMetadata = async (id: string): Promise<Omit<FileData, 'conte
 export const isFilePasswordProtected = async (id: string): Promise<boolean> => {
   try {
     const metadata = await getFileMetadata(id);
-    return metadata ? !!metadata.password : false;
+    // Changed this line to check for password property in a safer way
+    return metadata ? metadata.password !== null && metadata.password !== undefined : false;
   } catch (error) {
     console.error('Error checking if file is password protected:', error);
     return false;
@@ -294,20 +295,53 @@ export const updateFileExpiryDate = async (
 
 // Report file
 export const reportFile = async (id: string, reason: string): Promise<boolean> => {
-  // Not implemented in this version
-  return false;
+  try {
+    const response = await fetch(`${API_BASE_URL}/files/${id}/report`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ reason })
+    });
+    
+    return response.ok;
+  } catch (error) {
+    console.error('Error reporting file:', error);
+    return false;
+  }
 };
 
 // Get all files (admin function)
 export const getAllFiles = async (): Promise<Omit<FileData, 'content'>[]> => {
-  // Not implemented in this version
-  return [];
+  try {
+    const response = await fetch(`${API_BASE_URL}/files`);
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch files');
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching all files:', error);
+    return [];
+  }
 };
 
 // Calculate total storage usage in bytes
 export const getTotalStorageUsage = async (): Promise<number> => {
-  // Not implemented in this version
-  return 0;
+  try {
+    const response = await fetch(`${API_BASE_URL}/storage/usage`);
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch storage usage');
+    }
+    
+    const data = await response.json();
+    return data.usage || 0;
+  } catch (error) {
+    console.error('Error fetching storage usage:', error);
+    return 0;
+  }
 };
 
 // Verify admin credentials

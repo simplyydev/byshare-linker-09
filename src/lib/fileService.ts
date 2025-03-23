@@ -1,4 +1,3 @@
-
 import { ShareOptions } from '@/components/ui/ShareOptions';
 import { MAX_UPLOADS_PER_DAY } from './constants';
 
@@ -196,9 +195,14 @@ export const getFileMetadata = async (id: string): Promise<Omit<FileData, 'passw
 // Check if file is password protected
 export const isFilePasswordProtected = async (id: string): Promise<boolean> => {
   try {
-    const metadata = await getFileMetadata(id);
-    // Changed this line to check for password property in a safer way
-    return metadata ? metadata.password !== null && metadata.password !== undefined : false;
+    const response = await fetch(`${API_BASE_URL}/files/${id}/metadata`);
+    
+    if (!response.ok) {
+      return false;
+    }
+    
+    const metadata = await response.json();
+    return metadata && metadata.hasPassword === true;
   } catch (error) {
     console.error('Error checking if file is password protected:', error);
     return false;

@@ -1,4 +1,3 @@
-
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
@@ -189,9 +188,12 @@ app.get('/api/files/:id/metadata', (req, res) => {
     }
   }
   
-  // Return metadata without password
+  // Return metadata without password, but include hasPassword flag
   const { password, ...metadata } = file;
-  res.json(metadata);
+  res.json({
+    ...metadata,
+    hasPassword: !!password  // Add a boolean flag indicating if password exists
+  });
 });
 
 // Download file

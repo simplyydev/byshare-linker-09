@@ -1,10 +1,10 @@
-
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
+const archiver = require('archiver');
 
 const app = express();
 app.use(cors());
@@ -19,12 +19,31 @@ if (!fs.existsSync(storageDir)) {
 // Setup multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, storageDir);
+    const fileId = req.body.folderUploadId || uuidv4();
+    const uploadDir = path.join(storageDir, fileId);
+    
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    
+    cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
-    const fileId = uuidv4();
-    const ext = path.extname(file.originalname);
-    cb(null, `${fileId}${ext}`);
+    // For folder uploads, keep the relative path
+    if (req.body.folderPath) {
+      const relativePath = file.originalname;
+      // Create subdirectories if needed
+      const dirPath = path.dirname(relativePath);
+      if (dirPath !== '.') {
+        const fullDirPath = path.join(storageDir, req.body.folderUploadId, dirPath);
+        if (!fs.existsSync(fullDirPath)) {
+          fs.mkdirSync(fullDirPath, { recursive: true });
+        }
+      }
+      cb(null, relativePath);
+    } else {
+      cb(null, file.originalname);
+    }
   }
 });
 
@@ -72,10 +91,10 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const { originalname, mimetype, size, filename } = req.file;
-    const { expiryDate, password, visibility, userId } = req.body;
+    const { originalname, mimetype, size } = req.file;
+    const { expiryDate, password, visibility, userId, folderUploadId, folderPath, isFolder } = req.body;
     
-    const fileId = path.parse(filename).name; // Extract UUID from filename
+    const fileId = folderUploadId || path.parse(path.dirname(req.file.path)).name;
     
     // Add file to the database
     const newFile = {
@@ -89,11 +108,37 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
       reportCount: 0,
       reportReasons: [],
       uploadedBy: userId || req.ip,
+      userAgent: req.get('User-Agent'),
       visibility: visibility || 'public',
-      filename: filename
+      isFolder: isFolder === 'true',
+      folderPath: folderPath || null,
+      files: isFolder === 'true' ? [] : undefined
     };
     
-    filesDatabase.push(newFile);
+    // Check if this is a folder upload (subsequent file)
+    const existingFileIndex = filesDatabase.findIndex(f => f.id === fileId);
+    if (existingFileIndex !== -1 && isFolder === 'true') {
+      // Add to existing folder's files array
+      filesDatabase[existingFileIndex].files.push({
+        path: folderPath || originalname,
+        name: path.basename(originalname),
+        size: size,
+        type: mimetype
+      });
+      
+      // Update total size
+      filesDatabase[existingFileIndex].size += size;
+    } else {
+      if (isFolder === 'true') {
+        newFile.files = [{
+          path: folderPath || originalname,
+          name: path.basename(originalname),
+          size: size,
+          type: mimetype
+        }];
+      }
+      filesDatabase.push(newFile);
+    }
     
     // Add to user's upload history
     if (userId) {
@@ -101,16 +146,24 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
         userUploadsMap[userId] = [];
       }
       
-      userUploadsMap[userId].push({
-        id: fileId,
-        fileName: originalname,
-        fileSize: size,
-        fileType: mimetype,
-        uploadDate: newFile.createdAt,
-        expiryDate: expiryDate || null,
-        hasPassword: !!password,
-        visibility: visibility || 'public'
-      });
+      // Check if already in user history (for folder uploads)
+      const existingUploadIndex = userUploadsMap[userId].findIndex(u => u.id === fileId);
+      if (existingUploadIndex === -1) {
+        userUploadsMap[userId].push({
+          id: fileId,
+          fileName: originalname,
+          fileSize: size,
+          fileType: mimetype,
+          uploadDate: newFile.createdAt,
+          expiryDate: expiryDate || null,
+          hasPassword: !!password,
+          visibility: visibility || 'public',
+          isFolder: isFolder === 'true'
+        });
+      } else if (isFolder === 'true') {
+        // Update size for folder uploads
+        userUploadsMap[userId][existingUploadIndex].fileSize += size;
+      }
     }
     
     saveDatabase();
@@ -123,6 +176,18 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
     console.error('Upload error:', error);
     res.status(500).json({ error: 'File upload failed' });
   }
+});
+
+// Folder upload progress
+app.post('/api/upload/folder/progress', (req, res) => {
+  const { folderUploadId, total, current } = req.body;
+  
+  // In a real app, you'd store this progress in a database or cache
+  // For now, we'll just return the current progress
+  res.json({ 
+    id: folderUploadId,
+    progress: Math.round((current / total) * 100)
+  });
 });
 
 // File reporting endpoint
@@ -182,10 +247,14 @@ app.get('/api/files/:id/metadata', (req, res) => {
         filesDatabase.splice(fileIndex, 1);
       }
       
-      // Delete physical file
-      const filePath = path.join(storageDir, file.filename);
+      // Delete physical files
+      const filePath = path.join(storageDir, fileId);
       if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
+        if (fs.lstatSync(filePath).isDirectory()) {
+          fs.rmdirSync(filePath, { recursive: true });
+        } else {
+          fs.unlinkSync(filePath);
+        }
       }
       
       saveDatabase();
@@ -225,8 +294,46 @@ app.get('/api/files/:id/download', (req, res) => {
     return res.status(403).json({ error: 'Incorrect password' });
   }
   
-  const filePath = path.join(storageDir, file.filename);
-  res.download(filePath, file.name);
+  const filePath = path.join(storageDir, fileId);
+  
+  // Handle folder downloads as ZIP
+  if (file.isFolder || (fs.existsSync(filePath) && fs.lstatSync(filePath).isDirectory())) {
+    const zipFileName = `${file.name || 'folder'}.zip`;
+    const zipPath = path.join(storageDir, `${fileId}_download.zip`);
+    
+    // Create a zip file
+    const output = fs.createWriteStream(zipPath);
+    const archive = archiver('zip', {
+      zlib: { level: 9 } // Compression level
+    });
+    
+    // Listen for all archive data to be written
+    output.on('close', function() {
+      res.download(zipPath, zipFileName, () => {
+        // Delete the temporary zip file after download
+        fs.unlinkSync(zipPath);
+      });
+    });
+    
+    // Handle errors
+    archive.on('error', function(err) {
+      console.error('Archive error:', err);
+      res.status(500).json({ error: 'Failed to create archive' });
+    });
+    
+    // Pipe archive data to the file
+    archive.pipe(output);
+    
+    // Add directory contents to the archive
+    archive.directory(filePath, false);
+    
+    // Finalize the archive
+    archive.finalize();
+  } else {
+    // Regular file download
+    const fullPath = path.join(filePath, file.name);
+    res.download(fullPath, file.name);
+  }
 });
 
 // Get user uploads
@@ -266,10 +373,14 @@ app.delete('/api/files/:id', (req, res) => {
     }
   }
   
-  // Delete physical file
-  const filePath = path.join(storageDir, file.filename);
+  // Delete physical file/folder
+  const filePath = path.join(storageDir, fileId);
   if (fs.existsSync(filePath)) {
-    fs.unlinkSync(filePath);
+    if (fs.lstatSync(filePath).isDirectory()) {
+      fs.rmdirSync(filePath, { recursive: true });
+    } else {
+      fs.unlinkSync(filePath);
+    }
   }
   
   saveDatabase();

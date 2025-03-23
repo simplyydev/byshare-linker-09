@@ -1,6 +1,7 @@
 
 import { ShareOptions } from '@/components/ui/ShareOptions';
 import { MAX_UPLOADS_PER_DAY } from './constants';
+import config from './config';
 
 // Type definitions
 export interface FileData {
@@ -13,9 +14,12 @@ export interface FileData {
   createdAt: string; // ISO string
   reportCount: number;
   reportReasons: string[];
-  uploadedBy: string; // User ID
+  uploadedBy: string; // User ID or IP
+  userAgent?: string; // Browser info
   folderPath?: string; // For folder uploads
   visibility?: 'public' | 'private'; // Visibility option
+  isFolder?: boolean; // Whether this is a folder
+  files?: Array<{path: string; name: string; size: number; type: string}>; // Files in folder
 }
 
 // User history type
@@ -28,9 +32,17 @@ export interface UserUploadHistory {
   expiryDate: string | null;
   hasPassword: boolean;
   visibility: 'public' | 'private';
+  isFolder?: boolean;
 }
 
-// API base URL (updated to use relative path instead of localhost)
+// Upload progress type
+export interface UploadProgress {
+  loaded: number;
+  total: number;
+  progress: number;
+}
+
+// API base URL (using relative path)
 const API_BASE_URL = '/api';
 
 // Helper function to generate a unique user ID
@@ -88,44 +100,31 @@ export const getUserUploads = async (): Promise<UserUploadHistory[]> => {
   }
 };
 
-// Load settings from localStorage
+// Load settings from config
 export const loadSettings = (): {
   maxSizeMB: number;
   acceptedFileTypes: string[];
 } => {
-  const settings = localStorage.getItem('byshare_settings');
-  if (settings) {
-    return JSON.parse(settings);
-  }
-  // Default settings
   return {
-    maxSizeMB: 100,
-    acceptedFileTypes: [
-      'image/*',
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'text/plain',
-      'application/zip',
-      'application/x-rar-compressed',
-      'video/*',
-      'audio/*'
-    ]
+    maxSizeMB: config.get('upload.maxSizeMB'),
+    acceptedFileTypes: config.get('upload.acceptedFileTypes')
   };
 };
 
-// Save settings to localStorage
+// Save settings to config
 export const saveSettings = (settings: {
   maxSizeMB: number;
   acceptedFileTypes: string[];
 }): void => {
-  localStorage.setItem('byshare_settings', JSON.stringify(settings));
+  config.set('upload.maxSizeMB', settings.maxSizeMB);
+  config.set('upload.acceptedFileTypes', settings.acceptedFileTypes);
 };
 
-// Upload file to server
+// Upload single file to server
 export const uploadFile = async (
   file: File, 
-  options: ShareOptions
+  options: ShareOptions,
+  onProgress?: (progress: UploadProgress) => void
 ): Promise<{id: string, url: string}> => {
   if (isUploadLimitReached()) {
     throw new Error(`Limite de ${MAX_UPLOADS_PER_DAY} téléchargements par jour atteinte`);
@@ -151,13 +150,53 @@ export const uploadFile = async (
   
   if (file.webkitRelativePath) {
     formData.append('folderPath', file.webkitRelativePath);
+    formData.append('isFolder', 'true');
   }
   
   try {
-    const response = await fetch(`${API_BASE_URL}/upload`, {
-      method: 'POST',
-      body: formData
-    });
+    let response;
+    
+    if (onProgress) {
+      // Use XMLHttpRequest for progress tracking
+      response = await new Promise<Response>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${API_BASE_URL}/upload`);
+        
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            const progress = Math.round((event.loaded / event.total) * 100);
+            onProgress({
+              loaded: event.loaded,
+              total: event.total,
+              progress
+            });
+          }
+        };
+        
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(new Response(xhr.response, {
+              status: xhr.status,
+              statusText: xhr.statusText
+            }));
+          } else {
+            reject(new Error(xhr.statusText));
+          }
+        };
+        
+        xhr.onerror = () => {
+          reject(new Error('Upload failed'));
+        };
+        
+        xhr.send(formData);
+      });
+    } else {
+      // Use fetch API when progress isn't needed
+      response = await fetch(`${API_BASE_URL}/upload`, {
+        method: 'POST',
+        body: formData
+      });
+    }
     
     if (!response.ok) {
       const errorData = await response.json();
@@ -173,6 +212,102 @@ export const uploadFile = async (
     };
   } catch (error) {
     console.error('Upload error:', error);
+    throw error;
+  }
+};
+
+// Upload folder to server
+export const uploadFolder = async (
+  files: File[], 
+  options: ShareOptions,
+  onProgress?: (progress: UploadProgress) => void
+): Promise<{id: string, url: string}> => {
+  if (isUploadLimitReached()) {
+    throw new Error(`Limite de ${MAX_UPLOADS_PER_DAY} téléchargements par jour atteinte`);
+  }
+  
+  if (files.length === 0) {
+    throw new Error('No files to upload');
+  }
+  
+  // Generate folder upload ID
+  const folderUploadId = Math.random().toString(36).substring(2, 15);
+  const userId = getUserId();
+  
+  // Track overall progress
+  let totalUploaded = 0;
+  const totalSize = files.reduce((total, file) => total + file.size, 0);
+  
+  try {
+    // Upload files one by one
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const formData = new FormData();
+      
+      formData.append('file', file);
+      formData.append('userId', userId);
+      formData.append('folderUploadId', folderUploadId);
+      formData.append('isFolder', 'true');
+      
+      if (file.webkitRelativePath) {
+        formData.append('folderPath', file.webkitRelativePath);
+      }
+      
+      if (options.expiryDate) {
+        formData.append('expiryDate', options.expiryDate.toISOString());
+      }
+      
+      if (options.password) {
+        formData.append('password', options.password);
+      }
+      
+      if (options.visibility) {
+        formData.append('visibility', options.visibility);
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/upload`, {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Upload failed');
+      }
+      
+      // Update progress
+      totalUploaded += file.size;
+      if (onProgress) {
+        onProgress({
+          loaded: totalUploaded,
+          total: totalSize,
+          progress: Math.round((totalUploaded / totalSize) * 100)
+        });
+      }
+      
+      // Update folder upload progress on server
+      await fetch(`${API_BASE_URL}/upload/folder/progress`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          folderUploadId,
+          total: files.length,
+          current: i + 1
+        })
+      });
+    }
+    
+    // Only increment counter once for folder upload
+    incrementUploadCount();
+    
+    return { 
+      id: folderUploadId, 
+      url: `${window.location.origin}/files/${folderUploadId}` 
+    };
+  } catch (error) {
+    console.error('Folder upload error:', error);
     throw error;
   }
 };
@@ -351,24 +486,6 @@ export const getTotalStorageUsage = async (): Promise<number> => {
 
 // Verify admin credentials
 export const verifyAdminCredentials = (username: string, password: string): boolean => {
-  // In a real app, this would check against a securely stored credential
-  // For demo purposes, we'll use hardcoded values (very insecure!)
-  return username === 'admin' && password === 'byshare2024';
-};
-
-// Verify file password
-export const verifyFilePassword = async (id: string, password: string): Promise<boolean> => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/files/${id}/download?password=${encodeURIComponent(password)}`);
-    return response.ok;
-  } catch (error) {
-    console.error('Error verifying file password:', error);
-    return false;
-  }
-};
-
-// Generate file preview
-export const generateFilePreview = async (fileId: string): Promise<string | null> => {
-  // For this implementation, we'll just return the download URL
-  return `${API_BASE_URL}/files/${fileId}/download`;
+  const adminCreds = config.get('app.adminCredentials');
+  return username === adminCreds.username && password === adminCreds.password;
 };

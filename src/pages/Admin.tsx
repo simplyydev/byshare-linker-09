@@ -26,9 +26,12 @@ import {
   Flag,
   X,
   Lock,
-  LogIn
+  LogIn,
+  FolderUp,
+  Laptop
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import config from '@/lib/config';
 
 interface AdminFile {
   id: string;
@@ -40,6 +43,9 @@ interface AdminFile {
   reportCount: number;
   reportReasons: string[];
   uploadedBy: string;
+  userAgent?: string;
+  isFolder?: boolean;
+  files?: Array<{path: string; name: string; size: number; type: string}>;
 }
 
 const Admin = () => {
@@ -47,8 +53,11 @@ const Admin = () => {
   const [totalSize, setTotalSize] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [settings, setSettings] = useState({
-    maxSizeMB: 100,
-    acceptedFileTypes: ['image/*', 'application/pdf']
+    maxSizeMB: config.get('upload.maxSizeMB'),
+    acceptedFileTypes: config.get('upload.acceptedFileTypes'),
+    maxUploadsPerDay: config.get('app.maxUploadsPerDay'),
+    adminUsername: config.get('app.adminCredentials.username'),
+    adminPassword: config.get('app.adminCredentials.password')
   });
   const [newFileType, setNewFileType] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -69,7 +78,15 @@ const Admin = () => {
       
       setFiles(allFiles as AdminFile[]);
       setTotalSize(storageUsage);
-      setSettings(loadSettings());
+      
+      // Load settings from config
+      setSettings({
+        maxSizeMB: config.get('upload.maxSizeMB'),
+        acceptedFileTypes: config.get('upload.acceptedFileTypes'),
+        maxUploadsPerDay: config.get('app.maxUploadsPerDay'),
+        adminUsername: config.get('app.adminCredentials.username'),
+        adminPassword: config.get('app.adminCredentials.password')
+      });
     } catch (error) {
       console.error('Error loading admin data:', error);
       toast.error('Erreur lors du chargement des données');
@@ -103,7 +120,19 @@ const Admin = () => {
   };
 
   const handleSaveSettings = () => {
-    saveSettings(settings);
+    // Update config
+    config.set('upload.maxSizeMB', settings.maxSizeMB);
+    config.set('upload.acceptedFileTypes', settings.acceptedFileTypes);
+    config.set('app.maxUploadsPerDay', settings.maxUploadsPerDay);
+    config.set('app.adminCredentials.username', settings.adminUsername);
+    config.set('app.adminCredentials.password', settings.adminPassword);
+    
+    // Save to localStorage via fileService
+    saveSettings({
+      maxSizeMB: settings.maxSizeMB,
+      acceptedFileTypes: settings.acceptedFileTypes
+    });
+    
     toast.success('Paramètres enregistrés avec succès');
   };
 
@@ -154,6 +183,25 @@ const Admin = () => {
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
     if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
     return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+  };
+
+  const getDeviceInfo = (userAgent?: string) => {
+    if (!userAgent) return 'Inconnu';
+    
+    // Basic user agent parsing
+    if (userAgent.includes('iPhone') || userAgent.includes('iPad')) {
+      return 'iOS';
+    } else if (userAgent.includes('Android')) {
+      return 'Android';
+    } else if (userAgent.includes('Windows')) {
+      return 'Windows';
+    } else if (userAgent.includes('Mac')) {
+      return 'Mac';
+    } else if (userAgent.includes('Linux')) {
+      return 'Linux';
+    } else {
+      return 'Autre';
+    }
   };
 
   const filteredFiles = files.filter(file => 
@@ -288,6 +336,7 @@ const Admin = () => {
                         <th className="text-left py-3 px-4">Type</th>
                         <th className="text-left py-3 px-4">Taille</th>
                         <th className="text-left py-3 px-4">IP</th>
+                        <th className="text-left py-3 px-4">Appareil</th>
                         <th className="text-left py-3 px-4">Date de création</th>
                         <th className="text-left py-3 px-4">Expiration</th>
                         <th className="text-left py-3 px-4">Actions</th>
@@ -296,10 +345,21 @@ const Admin = () => {
                     <tbody>
                       {filteredFiles.map((file) => (
                         <tr key={file.id} className="border-b border-border/20 hover:bg-primary/5">
-                          <td className="py-3 px-4 truncate max-w-[200px]">{file.name}</td>
-                          <td className="py-3 px-4">{file.type}</td>
+                          <td className="py-3 px-4 truncate max-w-[200px]">
+                            <div className="flex items-center">
+                              {file.isFolder && <FolderUp className="h-4 w-4 mr-2 text-primary" />}
+                              {file.name}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">{file.isFolder ? 'Dossier' : file.type}</td>
                           <td className="py-3 px-4">{formatSize(file.size)}</td>
                           <td className="py-3 px-4">{file.uploadedBy}</td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center">
+                              <Laptop className="h-4 w-4 mr-1 text-muted-foreground" />
+                              {getDeviceInfo(file.userAgent)}
+                            </div>
+                          </td>
                           <td className="py-3 px-4">{formatDate(file.createdAt)}</td>
                           <td className="py-3 px-4">
                             {file.expiryDate ? formatDate(file.expiryDate) : 'Pas d\'expiration'}
@@ -353,7 +413,13 @@ const Admin = () => {
                       <div className="flex justify-between mb-3">
                         <div>
                           <h3 className="font-medium">{file.name}</h3>
-                          <p className="text-sm text-muted-foreground">{formatSize(file.size)} • {file.type}</p>
+                          <div className="flex text-sm text-muted-foreground">
+                            <span>{formatSize(file.size)}</span>
+                            <span className="mx-1">•</span>
+                            <span>{file.isFolder ? 'Dossier' : file.type}</span>
+                            <span className="mx-1">•</span>
+                            <span>IP: {file.uploadedBy}</span>
+                          </div>
                         </div>
                         <div className="flex items-center">
                           <span className="bg-destructive/10 text-destructive px-2 py-1 rounded-full text-xs font-medium">
@@ -424,6 +490,23 @@ const Admin = () => {
                 </div>
                 
                 <div>
+                  <Label htmlFor="maxUploadsPerDay" className="mb-2 block">
+                    Limite d'uploads par jour
+                  </Label>
+                  <Input
+                    id="maxUploadsPerDay"
+                    type="number"
+                    value={settings.maxUploadsPerDay}
+                    onChange={(e) => setSettings(prev => ({
+                      ...prev,
+                      maxUploadsPerDay: parseInt(e.target.value)
+                    }))}
+                    min="1"
+                    className="max-w-xs glass-subtle"
+                  />
+                </div>
+                
+                <div>
                   <Label className="mb-2 block">Types de fichiers acceptés</Label>
                   <div className="flex flex-wrap gap-2 mb-4">
                     {settings.acceptedFileTypes.map(type => (
@@ -451,6 +534,42 @@ const Admin = () => {
                   <p className="text-sm text-muted-foreground mt-2">
                     Vous pouvez ajouter des types MIME (ex: image/*) ou des extensions (ex: .pdf)
                   </p>
+                </div>
+                
+                <div className="space-y-4 border-t border-border/50 pt-6">
+                  <h3 className="font-medium">Identifiants administrateur</h3>
+                  
+                  <div>
+                    <Label htmlFor="adminUsername" className="mb-2 block">
+                      Nom d'utilisateur
+                    </Label>
+                    <Input
+                      id="adminUsername"
+                      type="text"
+                      value={settings.adminUsername}
+                      onChange={(e) => setSettings(prev => ({
+                        ...prev,
+                        adminUsername: e.target.value
+                      }))}
+                      className="max-w-xs glass-subtle"
+                    />
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="adminPassword" className="mb-2 block">
+                      Mot de passe
+                    </Label>
+                    <Input
+                      id="adminPassword"
+                      type="password"
+                      value={settings.adminPassword}
+                      onChange={(e) => setSettings(prev => ({
+                        ...prev,
+                        adminPassword: e.target.value
+                      }))}
+                      className="max-w-xs glass-subtle"
+                    />
+                  </div>
                 </div>
                 
                 <Button onClick={handleSaveSettings} className="btn-hover-effect">

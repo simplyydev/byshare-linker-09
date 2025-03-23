@@ -446,6 +446,27 @@ app.put('/api/files/:id/expiry', (req, res) => {
   res.json({ success: true });
 });
 
+// Add this new endpoint for password verification
+app.post('/api/files/:id/verify-password', (req, res) => {
+  const fileId = req.params.id;
+  const { password } = req.body;
+  
+  const file = filesDatabase.find(f => f.id === fileId);
+  
+  if (!file) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+  
+  // File has no password
+  if (!file.password) {
+    return res.status(400).json({ error: 'File is not password protected' });
+  }
+  
+  const isValid = password === file.password;
+  
+  res.json({ isValid });
+});
+
 // Catch-all route for client-side routing
 app.get('*', (req, res) => {
   res.sendFile(path.join(staticDir, 'index.html'));

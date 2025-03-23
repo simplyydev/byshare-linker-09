@@ -5,8 +5,9 @@ import { API_BASE_URL } from './apiConfig';
 import { getUserId, incrementUploadCount } from './userService';
 import { isUploadLimitReached } from './configService';
 import { MAX_UPLOADS_PER_DAY } from './constants';
+import { toast } from 'sonner';
 
-// Upload single file to server
+// Upload single file to server with improved error handling and progress tracking
 export const uploadFile = async (
   file: File, 
   options: ShareOptions,
@@ -14,6 +15,12 @@ export const uploadFile = async (
 ): Promise<{id: string, url: string}> => {
   if (isUploadLimitReached()) {
     throw new Error(`Limite de ${MAX_UPLOADS_PER_DAY} téléchargements par jour atteinte`);
+  }
+  
+  // Validate file size before uploading
+  const maxSize = parseInt(localStorage.getItem('byshare_config_maxSizeMB') || '100');
+  if (file.size > maxSize * 1024 * 1024) {
+    throw new Error(`Le fichier est trop volumineux. Taille maximale: ${maxSize}MB`);
   }
   
   const formData = new FormData();
@@ -61,17 +68,33 @@ export const uploadFile = async (
         
         xhr.onload = () => {
           if (xhr.status >= 200 && xhr.status < 300) {
-            resolve(new Response(xhr.response, {
-              status: xhr.status,
-              statusText: xhr.statusText
-            }));
+            try {
+              const responseData = JSON.parse(xhr.response);
+              resolve(new Response(xhr.response, {
+                status: xhr.status,
+                statusText: xhr.statusText
+              }));
+            } catch (error) {
+              reject(new Error('Réponse invalide du serveur'));
+            }
           } else {
-            reject(new Error(xhr.statusText));
+            let errorMessage = 'Échec du téléchargement';
+            try {
+              const errorData = JSON.parse(xhr.response);
+              errorMessage = errorData.error || errorMessage;
+            } catch (e) {
+              // Si la réponse n'est pas du JSON valide, utiliser le message par défaut
+            }
+            reject(new Error(errorMessage));
           }
         };
         
         xhr.onerror = () => {
-          reject(new Error('Upload failed'));
+          reject(new Error('Échec du téléchargement: problème de connexion'));
+        };
+        
+        xhr.ontimeout = () => {
+          reject(new Error('Délai d\'attente dépassé lors du téléchargement'));
         };
         
         xhr.send(formData);
@@ -85,8 +108,14 @@ export const uploadFile = async (
     }
     
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Upload failed');
+      let errorMessage = 'Échec du téléchargement';
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.error || errorMessage;
+      } catch (e) {
+        // Si la réponse n'est pas du JSON valide, utiliser le message par défaut
+      }
+      throw new Error(errorMessage);
     }
     
     const result = await response.json();
@@ -102,7 +131,7 @@ export const uploadFile = async (
   }
 };
 
-// Upload folder to server
+// Upload folder to server with improved handling
 export const uploadFolder = async (
   files: File[], 
   options: ShareOptions,
@@ -113,7 +142,7 @@ export const uploadFolder = async (
   }
   
   if (files.length === 0) {
-    throw new Error('No files to upload');
+    throw new Error('Aucun fichier à télécharger');
   }
   
   // Generate folder upload ID
@@ -125,6 +154,26 @@ export const uploadFolder = async (
   const totalSize = files.reduce((total, file) => total + file.size, 0);
   
   try {
+    // Check if total folder size exceeds limit
+    const maxSize = parseInt(localStorage.getItem('byshare_config_maxSizeMB') || '100');
+    if (totalSize > maxSize * 1024 * 1024) {
+      throw new Error(`Le dossier est trop volumineux. Taille maximale: ${maxSize}MB`);
+    }
+
+    // Group files by path to maintain folder structure
+    const filesByPath = new Map<string, File[]>();
+    
+    files.forEach(file => {
+      const path = file.webkitRelativePath.split('/').slice(0, -1).join('/');
+      if (!filesByPath.has(path)) {
+        filesByPath.set(path, []);
+      }
+      filesByPath.get(path)?.push(file);
+    });
+    
+    // Upload files by path group
+    const paths = Array.from(filesByPath.keys());
+    
     // Upload files one by one
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -151,14 +200,44 @@ export const uploadFolder = async (
         formData.append('visibility', options.visibility);
       }
       
-      const response = await fetch(`${API_BASE_URL}/upload`, {
-        method: 'POST',
-        body: formData
-      });
+      let retryCount = 0;
+      const maxRetries = 3;
+      let success = false;
       
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Upload failed');
+      while (!success && retryCount < maxRetries) {
+        try {
+          const response = await fetch(`${API_BASE_URL}/upload`, {
+            method: 'POST',
+            body: formData
+          });
+          
+          if (!response.ok) {
+            let errorMessage = 'Échec du téléchargement';
+            try {
+              const errorData = await response.json();
+              errorMessage = errorData.error || errorMessage;
+            } catch (e) {
+              // Si la réponse n'est pas du JSON valide, utiliser le message par défaut
+            }
+            
+            if (retryCount < maxRetries - 1) {
+              // Attendre avant de réessayer
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              retryCount++;
+              continue;
+            }
+            
+            throw new Error(errorMessage);
+          }
+          
+          success = true;
+        } catch (error) {
+          if (retryCount < maxRetries - 1) {
+            retryCount++;
+            continue;
+          }
+          throw error;
+        }
       }
       
       // Update progress
@@ -172,17 +251,22 @@ export const uploadFolder = async (
       }
       
       // Update folder upload progress on server
-      await fetch(`${API_BASE_URL}/upload/folder/progress`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          folderUploadId,
-          total: files.length,
-          current: i + 1
-        })
-      });
+      try {
+        await fetch(`${API_BASE_URL}/upload/folder/progress`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            folderUploadId,
+            total: files.length,
+            current: i + 1
+          })
+        });
+      } catch (error) {
+        // Non-critical error, log but continue
+        console.warn('Failed to update folder progress:', error);
+      }
     }
     
     // Only increment counter once for folder upload
@@ -281,6 +365,15 @@ export const getFileContent = async (id: string, password?: string): Promise<str
     const response = await fetch(url);
     
     if (!response.ok) {
+      let errorMessage = 'Échec du téléchargement';
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.error || errorMessage;
+      } catch (e) {
+        // Si la réponse n'est pas du JSON valide, utiliser le message par défaut
+      }
+      
+      toast.error(errorMessage);
       return null;
     }
     
@@ -288,6 +381,7 @@ export const getFileContent = async (id: string, password?: string): Promise<str
     return URL.createObjectURL(blob);
   } catch (error) {
     console.error('Error fetching file content:', error);
+    toast.error('Erreur lors du téléchargement du fichier');
     return null;
   }
 };

@@ -13,19 +13,27 @@ export const getUserId = (): string => {
   return userId;
 };
 
-// Get user upload history from server
+// Get user upload history from server with better error handling
 export const getUserUploads = async (): Promise<UserUploadHistory[]> => {
   try {
     const userId = getUserId();
     const response = await fetch(`${API_BASE_URL}/users/${userId}/uploads`);
     
     if (!response.ok) {
+      // Vérifier si la réponse est HTML (ce qui indiquerait un problème avec le serveur)
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('text/html')) {
+        console.error('Server returned HTML instead of JSON. API may not be available.');
+        return [];
+      }
+      
       throw new Error('Failed to fetch user uploads');
     }
     
     return await response.json();
   } catch (error) {
     console.error('Error fetching user uploads:', error);
+    // Retourner un tableau vide au lieu de planter
     return [];
   }
 };

@@ -16,40 +16,52 @@ if (!fs.existsSync(storageDir)) {
   fs.mkdirSync(storageDir, { recursive: true });
 }
 
-// Setup multer for file uploads
+// Setup multer for file uploads with improved error handling
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const fileId = req.body.folderUploadId || uuidv4();
-    const uploadDir = path.join(storageDir, fileId);
-    
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
+    try {
+      const fileId = req.body.folderUploadId || uuidv4();
+      const uploadDir = path.join(storageDir, fileId);
+      
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      
+      cb(null, uploadDir);
+    } catch (error) {
+      cb(new Error('Échec de création du répertoire de destination'));
     }
-    
-    cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
-    // For folder uploads, keep the relative path
-    if (req.body.folderPath) {
-      const relativePath = file.originalname;
-      // Create subdirectories if needed
-      const dirPath = path.dirname(relativePath);
-      if (dirPath !== '.') {
-        const fullDirPath = path.join(storageDir, req.body.folderUploadId, dirPath);
-        if (!fs.existsSync(fullDirPath)) {
-          fs.mkdirSync(fullDirPath, { recursive: true });
+    try {
+      // For folder uploads, keep the relative path
+      if (req.body.folderPath) {
+        const relativePath = file.originalname;
+        // Create subdirectories if needed
+        const dirPath = path.dirname(relativePath);
+        if (dirPath !== '.') {
+          const fullDirPath = path.join(storageDir, req.body.folderUploadId, dirPath);
+          if (!fs.existsSync(fullDirPath)) {
+            fs.mkdirSync(fullDirPath, { recursive: true });
+          }
         }
+        cb(null, relativePath);
+      } else {
+        cb(null, file.originalname);
       }
-      cb(null, relativePath);
-    } else {
-      cb(null, file.originalname);
+    } catch (error) {
+      cb(new Error('Échec de création du fichier'));
     }
   }
 });
 
 const upload = multer({ 
   storage,
-  limits: { fileSize: 100 * 1024 * 1024 } // 100MB limit
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limit
+  fileFilter: (req, file, cb) => {
+    // Les vérifications de type de fichier pourront être ajoutées ici
+    cb(null, true);
+  }
 });
 
 // In-memory database for file metadata (in a real app, use a real database)
@@ -58,11 +70,15 @@ let userUploadsMap = {};
 
 // Save database to a JSON file periodically
 const saveDatabase = () => {
-  const data = JSON.stringify({ 
-    files: filesDatabase,
-    userUploads: userUploadsMap
-  });
-  fs.writeFileSync(path.join(__dirname, 'database.json'), data);
+  try {
+    const data = JSON.stringify({ 
+      files: filesDatabase,
+      userUploads: userUploadsMap
+    });
+    fs.writeFileSync(path.join(__dirname, 'database.json'), data);
+  } catch (error) {
+    console.error('Error saving database:', error);
+  }
 };
 
 // Load database from file on startup
@@ -84,110 +100,151 @@ app.use('/storage', express.static(storageDir));
 const staticDir = path.join(__dirname, '../dist');
 app.use(express.static(staticDir));
 
-// Upload endpoint - Fixed the parameters order
-app.post('/api/upload', upload.single('file'), (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Server error:', err);
+  res.status(500).json({ error: err.message || 'Erreur interne du serveur' });
+});
 
-    const { originalname, mimetype, size } = req.file;
-    const { expiryDate, password, visibility, userId, folderUploadId, folderPath, isFolder } = req.body;
+// Upload endpoint with improved error handling
+app.post('/api/upload', (req, res, next) => {
+  upload.single('file')(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: 'Fichier trop volumineux' });
+      }
+      return res.status(400).json({ error: err.message || 'Erreur de téléchargement' });
+    }
     
-    const fileId = folderUploadId || path.parse(path.dirname(req.file.path)).name;
-    
-    // Add file to the database
-    const newFile = {
-      id: fileId,
-      name: originalname,
-      size: size,
-      type: mimetype,
-      password: password || null,
-      expiryDate: expiryDate || null,
-      createdAt: new Date().toISOString(),
-      reportCount: 0,
-      reportReasons: [],
-      uploadedBy: userId || req.ip,
-      userAgent: req.get('User-Agent'),
-      visibility: visibility || 'public',
-      isFolder: isFolder === 'true',
-      folderPath: folderPath || null,
-      files: isFolder === 'true' ? [] : undefined
-    };
-    
-    // Check if this is a folder upload (subsequent file)
-    const existingFileIndex = filesDatabase.findIndex(f => f.id === fileId);
-    if (existingFileIndex !== -1 && isFolder === 'true') {
-      // Add to existing folder's files array
-      filesDatabase[existingFileIndex].files.push({
-        path: folderPath || originalname,
-        name: path.basename(originalname),
-        size: size,
-        type: mimetype
-      });
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'Aucun fichier téléchargé' });
+      }
+
+      const { originalname, mimetype, size } = req.file;
+      const { expiryDate, password, visibility, userId, folderUploadId, folderPath, isFolder } = req.body;
       
-      // Update total size
-      filesDatabase[existingFileIndex].size += size;
-    } else {
-      if (isFolder === 'true') {
-        newFile.files = [{
+      const fileId = folderUploadId || path.parse(path.dirname(req.file.path)).name;
+      
+      // Add file to the database
+      const newFile = {
+        id: fileId,
+        name: originalname,
+        size: size,
+        type: mimetype,
+        password: password || null,
+        expiryDate: expiryDate || null,
+        createdAt: new Date().toISOString(),
+        reportCount: 0,
+        reportReasons: [],
+        uploadedBy: userId || req.ip,
+        userAgent: req.get('User-Agent'),
+        visibility: visibility || 'public',
+        isFolder: isFolder === 'true',
+        folderPath: folderPath || null,
+        files: isFolder === 'true' ? [] : undefined
+      };
+      
+      // Check if this is a folder upload (subsequent file)
+      const existingFileIndex = filesDatabase.findIndex(f => f.id === fileId);
+      if (existingFileIndex !== -1 && isFolder === 'true') {
+        // Add to existing folder's files array
+        filesDatabase[existingFileIndex].files.push({
           path: folderPath || originalname,
           name: path.basename(originalname),
           size: size,
           type: mimetype
-        }];
-      }
-      filesDatabase.push(newFile);
-    }
-    
-    // Add to user's upload history
-    if (userId) {
-      if (!userUploadsMap[userId]) {
-        userUploadsMap[userId] = [];
+        });
+        
+        // Update total size
+        filesDatabase[existingFileIndex].size += size;
+      } else {
+        if (isFolder === 'true') {
+          newFile.files = [{
+            path: folderPath || originalname,
+            name: path.basename(originalname),
+            size: size,
+            type: mimetype
+          }];
+        }
+        filesDatabase.push(newFile);
       }
       
-      // Check if already in user history (for folder uploads)
-      const existingUploadIndex = userUploadsMap[userId].findIndex(u => u.id === fileId);
-      if (existingUploadIndex === -1) {
-        userUploadsMap[userId].push({
-          id: fileId,
-          fileName: originalname,
-          fileSize: size,
-          fileType: mimetype,
-          uploadDate: newFile.createdAt,
-          expiryDate: expiryDate || null,
-          hasPassword: !!password,
-          visibility: visibility || 'public',
-          isFolder: isFolder === 'true'
-        });
-      } else if (isFolder === 'true') {
-        // Update size for folder uploads
-        userUploadsMap[userId][existingUploadIndex].fileSize += size;
+      // Add to user's upload history
+      if (userId) {
+        if (!userUploadsMap[userId]) {
+          userUploadsMap[userId] = [];
+        }
+        
+        // Check if already in user history (for folder uploads)
+        const existingUploadIndex = userUploadsMap[userId].findIndex(u => u.id === fileId);
+        if (existingUploadIndex === -1) {
+          userUploadsMap[userId].push({
+            id: fileId,
+            fileName: originalname,
+            fileSize: size,
+            fileType: mimetype,
+            uploadDate: newFile.createdAt,
+            expiryDate: expiryDate || null,
+            hasPassword: !!password,
+            visibility: visibility || 'public',
+            isFolder: isFolder === 'true'
+          });
+        } else if (isFolder === 'true') {
+          // Update size for folder uploads
+          userUploadsMap[userId][existingUploadIndex].fileSize += size;
+        }
       }
+      
+      saveDatabase();
+      
+      res.status(201).json({ 
+        id: fileId, 
+        url: `${req.protocol}://${req.get('host')}/files/${fileId}` 
+      });
+    } catch (error) {
+      console.error('Upload error:', error);
+      res.status(500).json({ error: 'Échec du téléchargement' });
     }
+  });
+});
+
+// Get user uploads with improved error handling
+app.get('/api/users/:userId/uploads', (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const uploads = userUploadsMap[userId] || [];
     
-    saveDatabase();
-    
-    res.status(201).json({ 
-      id: fileId, 
-      url: `${req.protocol}://${req.get('host')}/files/${fileId}` 
-    });
+    // Sort by date and return
+    res.json(uploads.sort((a, b) => {
+      return new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime();
+    }));
   } catch (error) {
-    console.error('Upload error:', error);
-    res.status(500).json({ error: 'File upload failed' });
+    console.error('Error getting user uploads:', error);
+    res.status(500).json({ error: 'Échec de récupération des téléchargements' });
   }
 });
 
+// Add appropriate error handling for all other routes
 // Folder upload progress
 app.post('/api/upload/folder/progress', (req, res) => {
-  const { folderUploadId, total, current } = req.body;
-  
-  // In a real app, you'd store this progress in a database or cache
-  // For now, we'll just return the current progress
-  res.json({ 
-    id: folderUploadId,
-    progress: Math.round((current / total) * 100)
-  });
+  try {
+    const { folderUploadId, total, current } = req.body;
+    
+    if (!folderUploadId) {
+      return res.status(400).json({ error: 'ID de dossier requis' });
+    }
+    
+    // In a real app, you'd store this progress in a database or cache
+    // For now, we'll just return the current progress
+    res.json({ 
+      id: folderUploadId,
+      progress: Math.round((current / total) * 100)
+    });
+  } catch (error) {
+    console.error('Error updating folder progress:', error);
+    res.status(500).json({ error: 'Échec de mise à jour de la progression' });
+  }
 });
 
 // File reporting endpoint
@@ -336,17 +393,6 @@ app.get('/api/files/:id/download', (req, res) => {
   }
 });
 
-// Get user uploads
-app.get('/api/users/:userId/uploads', (req, res) => {
-  const userId = req.params.userId;
-  const uploads = userUploadsMap[userId] || [];
-  
-  // Sort by date and return
-  res.json(uploads.sort((a, b) => {
-    return new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime();
-  }));
-});
-
 // Delete file
 app.delete('/api/files/:id', (req, res) => {
   const fileId = req.params.id;
@@ -448,23 +494,32 @@ app.put('/api/files/:id/expiry', (req, res) => {
 
 // Add this new endpoint for password verification
 app.post('/api/files/:id/verify-password', (req, res) => {
-  const fileId = req.params.id;
-  const { password } = req.body;
-  
-  const file = filesDatabase.find(f => f.id === fileId);
-  
-  if (!file) {
-    return res.status(404).json({ error: 'File not found' });
+  try {
+    const fileId = req.params.id;
+    const { password } = req.body;
+    
+    if (!password) {
+      return res.status(400).json({ error: 'Mot de passe requis' });
+    }
+    
+    const file = filesDatabase.find(f => f.id === fileId);
+    
+    if (!file) {
+      return res.status(404).json({ error: 'Fichier non trouvé' });
+    }
+    
+    // File has no password
+    if (!file.password) {
+      return res.status(400).json({ error: 'Le fichier n\'est pas protégé par mot de passe' });
+    }
+    
+    const isValid = password === file.password;
+    
+    res.json({ isValid });
+  } catch (error) {
+    console.error('Error verifying password:', error);
+    res.status(500).json({ error: 'Erreur de vérification du mot de passe' });
   }
-  
-  // File has no password
-  if (!file.password) {
-    return res.status(400).json({ error: 'File is not password protected' });
-  }
-  
-  const isValid = password === file.password;
-  
-  res.json({ isValid });
 });
 
 // Catch-all route for client-side routing

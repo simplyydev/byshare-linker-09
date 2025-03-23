@@ -36,6 +36,7 @@ const Upload = () => {
   const [uploadsToday, setUploadsToday] = useState(0);
   const [isFolder, setIsFolder] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | undefined>(undefined);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const { maxSizeMB, acceptedFileTypes } = loadSettings();
 
@@ -52,6 +53,7 @@ const Upload = () => {
       setFileUrl(null);
     }
     setUploadProgress(undefined);
+    setUploadError(null);
   };
 
   const handleFolderSelect = (files: File[]) => {
@@ -67,6 +69,7 @@ const Upload = () => {
       setFileUrl(null);
     }
     setUploadProgress(undefined);
+    setUploadError(null);
   };
 
   const handleOptionsChange = (newOptions: {
@@ -94,6 +97,7 @@ const Upload = () => {
 
     setIsUploading(true);
     setUploadProgress(0);
+    setUploadError(null);
     
     try {
       let result;
@@ -113,10 +117,11 @@ const Upload = () => {
       toast.success("Fichier téléchargé avec succès!");
     } catch (error) {
       console.error('Upload error:', error);
-      toast.error("Erreur lors du téléchargement du fichier");
+      const errorMessage = error instanceof Error ? error.message : "Erreur lors du téléchargement du fichier";
+      setUploadError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setIsUploading(false);
-      setUploadProgress(undefined);
     }
   };
 
@@ -131,6 +136,7 @@ const Upload = () => {
       visibility: 'public'
     });
     setUploadProgress(undefined);
+    setUploadError(null);
   };
 
   return (
@@ -191,6 +197,12 @@ const Upload = () => {
                   acceptedFileTypes={acceptedFileTypes}
                   uploadProgress={uploadProgress}
                 />
+                
+                {uploadError && (
+                  <div className="mt-4 p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive text-sm">
+                    <p>{uploadError}</p>
+                  </div>
+                )}
               </div>
               
               {(file || folderFiles.length > 0) && (
@@ -205,7 +217,7 @@ const Upload = () => {
                         <div className="animate-spin mr-2">
                           <RefreshCw className="h-5 w-5" />
                         </div>
-                        Téléchargement...
+                        Téléchargement... {uploadProgress !== undefined && `(${uploadProgress}%)`}
                       </>
                     ) : (
                       <>

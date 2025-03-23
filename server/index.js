@@ -1,3 +1,4 @@
+
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
@@ -59,6 +60,10 @@ try {
 
 // CORS configuration for the storage directory
 app.use('/storage', express.static(storageDir));
+
+// Serve static files from the build directory
+const staticDir = path.join(__dirname, '../dist');
+app.use(express.static(staticDir));
 
 // Upload endpoint - Fixed the parameters order
 app.post('/api/upload', upload.single('file'), (req, res) => {
@@ -328,6 +333,11 @@ app.put('/api/files/:id/expiry', (req, res) => {
   saveDatabase();
   
   res.json({ success: true });
+});
+
+// Catch-all route for client-side routing
+app.get('*', (req, res) => {
+  res.sendFile(path.join(staticDir, 'index.html'));
 });
 
 const PORT = process.env.PORT || 3000;

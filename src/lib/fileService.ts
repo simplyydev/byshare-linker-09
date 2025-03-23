@@ -1,3 +1,4 @@
+
 import { ShareOptions } from '@/components/ui/ShareOptions';
 import { MAX_UPLOADS_PER_DAY } from './constants';
 
@@ -29,8 +30,8 @@ export interface UserUploadHistory {
   visibility: 'public' | 'private';
 }
 
-// API base URL
-const API_BASE_URL = 'http://localhost:3000/api';
+// API base URL (updated to use relative path instead of localhost)
+const API_BASE_URL = '/api';
 
 // Helper function to generate a unique user ID
 const getUserId = (): string => {

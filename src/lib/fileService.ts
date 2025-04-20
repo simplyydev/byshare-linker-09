@@ -1,4 +1,3 @@
-
 import { ShareOptions } from '@/components/ui/ShareOptions';
 import { MAX_UPLOADS_PER_DAY } from './constants';
 import config from './config';
@@ -341,6 +340,29 @@ export const isFilePasswordProtected = async (id: string): Promise<boolean> => {
     return metadata && metadata.hasPassword === true;
   } catch (error) {
     console.error('Error checking if file is password protected:', error);
+    return false;
+  }
+};
+
+// Verify file password
+export const verifyFilePassword = async (id: string, password: string): Promise<boolean> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/files/${id}/verify-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ password })
+    });
+    
+    if (!response.ok) {
+      return false;
+    }
+    
+    const result = await response.json();
+    return result.valid === true;
+  } catch (error) {
+    console.error('Error verifying file password:', error);
     return false;
   }
 };

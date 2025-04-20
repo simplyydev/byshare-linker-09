@@ -1,3 +1,4 @@
+
 // Type definitions
 export interface FileData {
   id: string;

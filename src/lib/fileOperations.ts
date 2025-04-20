@@ -1,5 +1,5 @@
 import { ShareOptions } from '@/components/ui/ShareOptions';
-import { FileData, UploadProgress, UserUploadHistory } from './types';
+import { FileData, UploadProgress, UserUploadHistory, ImportRecord } from './types';
 import { API_BASE_URL, IS_LOCAL_MODE } from './apiConfig';
 import { getUserId, incrementUploadCount, getUserUploads, saveUserUploads } from './userService';
 import { isUploadLimitReached } from './configService';

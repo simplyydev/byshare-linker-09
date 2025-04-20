@@ -3,7 +3,7 @@
 // This maintains backward compatibility with existing imports
 
 // Types
-export type { FileData, UserUploadHistory, UploadProgress } from './types';
+export type { FileData, UserUploadHistory, UploadProgress, ImportRecord } from './types';
 
 // User services
 export { 
@@ -31,7 +31,8 @@ export {
   getFileContent,
   updateFileVisibility,
   updateFileExpiryDate,
-  reportFile
+  reportFile,
+  getImports
 } from './fileOperations';
 
 // Admin services

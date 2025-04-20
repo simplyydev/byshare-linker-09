@@ -12,17 +12,27 @@ import UserHistory from "./pages/UserHistory";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 
-// Initialize config
-import config from "./lib/config";
+// Initialize service with default settings
+import { loadSettings, saveSettings } from "./lib/fileService";
 
 const queryClient = new QueryClient();
 
-// Initialize default settings if they are not already set
-if (!localStorage.getItem('byshare_config')) {
-  // Default values are already set in config.js
-  // but we can ensure they're saved to localStorage
-  config.set('upload.maxSizeMB', config.get('upload.maxSizeMB'));
-  config.set('upload.acceptedFileTypes', config.get('upload.acceptedFileTypes'));
+// Initialize settings if they don't exist
+if (!localStorage.getItem('byshare_settings')) {
+  saveSettings({
+    maxSizeMB: 100,
+    acceptedFileTypes: [
+      'image/*',
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'text/plain',
+      'application/zip',
+      'application/x-rar-compressed',
+      'video/*',
+      'audio/*'
+    ]
+  });
 }
 
 const App = () => (

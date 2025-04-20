@@ -4,7 +4,6 @@ import { Upload, X, Check, Image, File as FileIcon, Film, Music, Archive, FileTe
 import { cn } from '@/lib/utils';
 import { Switch } from './switch';
 import { Label } from './label';
-import { Progress } from './progress';
 
 interface FileDropzoneProps {
   onFileSelect: (file: File) => void;
@@ -12,7 +11,6 @@ interface FileDropzoneProps {
   maxSizeMB?: number;
   acceptedFileTypes?: string[];
   className?: string;
-  uploadProgress?: number;
 }
 
 export function FileDropzone({ 
@@ -20,14 +18,12 @@ export function FileDropzone({
   onFolderSelect,
   maxSizeMB = 100, 
   acceptedFileTypes = [], 
-  className,
-  uploadProgress
+  className 
 }: FileDropzoneProps) {
   const [isDragActive, setIsDragActive] = useState(false);
   const [filePreview, setFilePreview] = useState<{ file: File; previewUrl?: string } | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isFolderMode, setIsFolderMode] = useState(false);
-  const [folderFiles, setFolderFiles] = useState<File[]>([]);
 
   const handleDrag = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -107,27 +103,11 @@ export function FileDropzone({
       if (isFolderMode && onFolderSelect) {
         // Handle folder upload
         const files = Array.from(e.target.files);
-        setFolderFiles(files);
         onFolderSelect(files);
         
-        // For preview, show info about the folder
-        const firstFile = files[0];
-        if (firstFile) {
-          // Extract folder name from path
-          const folderPath = firstFile.webkitRelativePath;
-          const folderName = folderPath.split('/')[0];
-          
-          // Create a "folder" file for preview
-          const folderFile = new File(
-            [new Blob([''])], 
-            folderName, 
-            { type: 'folder/directory' }
-          );
-          
-          setFilePreview({ 
-            file: folderFile,
-            previewUrl: undefined
-          });
+        // For preview, show the first file
+        if (files.length > 0) {
+          processFile(files[0]);
         }
       } else {
         // Handle single file upload
@@ -139,11 +119,9 @@ export function FileDropzone({
   const handleRemoveFile = useCallback(() => {
     setFilePreview(null);
     setErrorMessage(null);
-    setFolderFiles([]);
   }, []);
 
   const getFileIcon = (fileType: string) => {
-    if (fileType === 'folder/directory') return <FolderUp className="h-10 w-10 text-primary" />;
     if (fileType.startsWith('image/')) return <Image className="h-10 w-10 text-primary" />;
     if (fileType.startsWith('video/')) return <Film className="h-10 w-10 text-primary" />;
     if (fileType.startsWith('audio/')) return <Music className="h-10 w-10 text-primary" />;
@@ -185,35 +163,15 @@ export function FileDropzone({
             
             <div className="text-center space-y-1">
               <p className="font-medium truncate max-w-xs">{filePreview.file.name}</p>
-              {filePreview.file.type === 'folder/directory' && folderFiles.length > 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  {folderFiles.length} fichiers • {(folderFiles.reduce((sum, file) => sum + file.size, 0) / 1024 / 1024).toFixed(2)} MB
-                </p>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  {(filePreview.file.size / 1024 / 1024).toFixed(2)} MB
-                </p>
-              )}
+              <p className="text-sm text-muted-foreground">
+                {(filePreview.file.size / 1024 / 1024).toFixed(2)} MB
+              </p>
             </div>
             
-            {uploadProgress !== undefined && uploadProgress > 0 && uploadProgress < 100 ? (
-              <div className="mt-4 w-full space-y-2">
-                <div className="flex justify-between text-xs">
-                  <span>Téléchargement en cours...</span>
-                  <span>{uploadProgress}%</span>
-                </div>
-                <Progress value={uploadProgress} className="h-2" />
-              </div>
-            ) : (
-              <div className="mt-4 flex items-center">
-                <Check className="h-4 w-4 text-green-500 mr-2" />
-                <span className="text-sm text-green-500">
-                  {filePreview.file.type === 'folder/directory' 
-                    ? 'Dossier prêt à être partagé' 
-                    : 'Fichier prêt à être partagé'}
-                </span>
-              </div>
-            )}
+            <div className="mt-4 flex items-center">
+              <Check className="h-4 w-4 text-green-500 mr-2" />
+              <span className="text-sm text-green-500">Fichier prêt à être partagé</span>
+            </div>
           </div>
         </div>
       ) : (
@@ -302,7 +260,6 @@ export function FileDisplay({
   fileType, 
   previewUrl, 
   isProtected,
-  isFolder,
   onDownload,
   className
 }: { 
@@ -311,12 +268,10 @@ export function FileDisplay({
   fileType: string;
   previewUrl?: string;
   isProtected?: boolean;
-  isFolder?: boolean;
   onDownload: () => void;
   className?: string;
 }) {
   const getFileIcon = (fileType: string) => {
-    if (isFolder) return <FolderUp className="h-10 w-10 text-primary" />;
     if (fileType.startsWith('image/')) return <Image className="h-10 w-10 text-primary" />;
     if (fileType.startsWith('video/')) return <Film className="h-10 w-10 text-primary" />;
     if (fileType.startsWith('audio/')) return <Music className="h-10 w-10 text-primary" />;
@@ -334,7 +289,7 @@ export function FileDisplay({
     )}>
       <div className="flex flex-col items-center">
         <div className="mb-4 relative w-full">
-          {previewUrl && !isFolder ? (
+          {previewUrl ? (
             <div className="relative overflow-hidden rounded-xl w-full aspect-video">
               <img 
                 src={previewUrl}
@@ -358,7 +313,7 @@ export function FileDisplay({
         <div className="text-center space-y-1 w-full">
           <p className="font-medium truncate max-w-full">{fileName}</p>
           <p className="text-sm text-muted-foreground">
-            {isFolder ? 'Dossier' : (fileSize / 1024 / 1024).toFixed(2) + ' MB'}
+            {(fileSize / 1024 / 1024).toFixed(2)} MB
           </p>
         </div>
         
@@ -367,7 +322,7 @@ export function FileDisplay({
           className="mt-4 flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg w-full btn-hover-effect"
         >
           <Download className="h-4 w-4" />
-          <span>Télécharger {isFolder ? 'le dossier (ZIP)' : ''}</span>
+          <span>Télécharger</span>
         </button>
       </div>
     </div>

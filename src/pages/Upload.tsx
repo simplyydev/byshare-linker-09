@@ -5,23 +5,15 @@ import { FileDropzone } from '@/components/ui/FileDropzone';
 import { ShareOptions } from '@/components/ui/ShareOptions';
 import { FileLink } from '@/components/ui/FileLink';
 import { UserHistoryCard } from '@/components/ui/UserHistoryCard';
-import { 
-  uploadFile, 
-  uploadFolder, 
-  loadSettings, 
-  getUploadCountForToday,
-  UploadProgress 
-} from '@/lib/fileService';
+import { uploadFile, loadSettings, getUploadCountForToday } from '@/lib/fileService';
 import { Layout } from '@/components/Layout';
 import { toast } from 'sonner';
 import { FileIcon, Share, Shield, RefreshCw, FolderUp, History } from 'lucide-react';
 import { MAX_UPLOADS_PER_DAY } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
-import config from '@/lib/config';
 
 const Upload = () => {
   const [file, setFile] = useState<File | null>(null);
-  const [folderFiles, setFolderFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [options, setOptions] = useState<{
@@ -35,7 +27,6 @@ const Upload = () => {
   });
   const [uploadsToday, setUploadsToday] = useState(0);
   const [isFolder, setIsFolder] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<number | undefined>(undefined);
 
   const { maxSizeMB, acceptedFileTypes } = loadSettings();
 
@@ -46,12 +37,10 @@ const Upload = () => {
 
   const handleFileSelect = (selectedFile: File) => {
     setFile(selectedFile);
-    setIsFolder(false);
-    setFolderFiles([]);
+    // Reset file URL if a new file is selected
     if (fileUrl) {
       setFileUrl(null);
     }
-    setUploadProgress(undefined);
   };
 
   const handleFolderSelect = (files: File[]) => {
@@ -60,13 +49,10 @@ const Upload = () => {
       return;
     }
     
-    setFolderFiles(files);
+    // For demonstration, we'll just select the first file for now
+    // In a complete implementation, you would handle multiple files
+    handleFileSelect(files[0]);
     setIsFolder(true);
-    setFile(null);
-    if (fileUrl) {
-      setFileUrl(null);
-    }
-    setUploadProgress(undefined);
   };
 
   const handleOptionsChange = (newOptions: {
@@ -77,13 +63,9 @@ const Upload = () => {
     setOptions(newOptions);
   };
 
-  const handleUploadProgress = (progress: UploadProgress) => {
-    setUploadProgress(progress.progress);
-  };
-
   const handleUpload = async () => {
-    if (!file && folderFiles.length === 0) {
-      toast.error("Veuillez sélectionner un fichier ou un dossier");
+    if (!file) {
+      toast.error("Veuillez sélectionner un fichier");
       return;
     }
 
@@ -93,21 +75,8 @@ const Upload = () => {
     }
 
     setIsUploading(true);
-    setUploadProgress(0);
-    
     try {
-      let result;
-      
-      if (isFolder && folderFiles.length > 0) {
-        // Upload folder
-        result = await uploadFolder(folderFiles, options, handleUploadProgress);
-      } else if (file) {
-        // Upload single file
-        result = await uploadFile(file, options, handleUploadProgress);
-      } else {
-        throw new Error("Aucun fichier à télécharger");
-      }
-      
+      const result = await uploadFile(file, options);
       setFileUrl(result.url);
       setUploadsToday(prev => prev + 1);
       toast.success("Fichier téléchargé avec succès!");
@@ -116,21 +85,18 @@ const Upload = () => {
       toast.error("Erreur lors du téléchargement du fichier");
     } finally {
       setIsUploading(false);
-      setUploadProgress(undefined);
     }
   };
 
   const handleReset = () => {
     setFile(null);
-    setFolderFiles([]);
     setFileUrl(null);
-    setIsFolder(false);
     setOptions({
       expiryDate: null,
       password: null,
       visibility: 'public'
     });
-    setUploadProgress(undefined);
+    setIsFolder(false);
   };
 
   return (
@@ -189,11 +155,10 @@ const Upload = () => {
                   onFolderSelect={handleFolderSelect}
                   maxSizeMB={maxSizeMB}
                   acceptedFileTypes={acceptedFileTypes}
-                  uploadProgress={uploadProgress}
                 />
               </div>
               
-              {(file || folderFiles.length > 0) && (
+              {file && (
                 <>
                   <button
                     onClick={handleUpload}

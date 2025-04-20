@@ -33,78 +33,63 @@ const FileView = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const loadFileData = async () => {
-      if (!id) {
-        setError("Identifiant de fichier manquant");
-        setIsLoading(false);
-        return;
-      }
-  
-      try {
-        // Check if file exists and if it's password protected
-        const metadata = await getFileMetadata(id);
-        if (!metadata) {
-          setError("Fichier non trouvé ou expiré");
-          setIsLoading(false);
-          return;
-        }
-  
-        const fileIsPasswordProtected = await isFilePasswordProtected(id);
-        setIsPasswordProtected(fileIsPasswordProtected);
-        
-        // If file is not password protected, load content immediately
-        if (!fileIsPasswordProtected) {
-          const content = await getFileContent(id);
-          if (content) {
-            setFile({
-              id,
-              name: metadata.name,
-              size: metadata.size,
-              type: metadata.type,
-              content
-            });
-            setIsPasswordVerified(true);
-          } else {
-            setError("Impossible de charger le contenu du fichier");
-          }
-        }
-      } catch (error) {
-        console.error("Error loading file:", error);
-        setError("Une erreur est survenue lors du chargement du fichier");
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    if (!id) {
+      setError("Identifiant de fichier manquant");
+      setIsLoading(false);
+      return;
+    }
 
-    loadFileData();
+    // Check if file exists and if it's password protected
+    const metadata = getFileMetadata(id);
+    if (!metadata) {
+      setError("Fichier non trouvé ou expiré");
+      setIsLoading(false);
+      return;
+    }
+
+    setIsPasswordProtected(isFilePasswordProtected(id));
+    
+    // If file is not password protected, load content immediately
+    if (!isFilePasswordProtected(id)) {
+      const content = getFileContent(id);
+      if (content) {
+        setFile({
+          id,
+          name: metadata.name,
+          size: metadata.size,
+          type: metadata.type,
+          content
+        });
+        setIsPasswordVerified(true);
+      } else {
+        setError("Impossible de charger le contenu du fichier");
+      }
+    }
+    
+    setIsLoading(false);
   }, [id]);
 
   const handlePasswordSubmit = async (password: string): Promise<boolean> => {
     if (!id) return false;
     
-    try {
-      const isCorrect = await verifyFilePassword(id, password);
-      if (isCorrect) {
-        const metadata = await getFileMetadata(id);
-        const content = await getFileContent(id, password);
-        
-        if (metadata && content) {
-          setFile({
-            id,
-            name: metadata.name,
-            size: metadata.size,
-            type: metadata.type,
-            content
-          });
-          setIsPasswordVerified(true);
-        }
-      }
+    const isCorrect = verifyFilePassword(id, password);
+    if (isCorrect) {
+      const metadata = getFileMetadata(id);
+      const content = getFileContent(id, password);
       
-      return isCorrect;
-    } catch (error) {
-      console.error("Error verifying password:", error);
-      return false;
+      if (metadata && content) {
+        setFile({
+          id,
+          name: metadata.name,
+          size: metadata.size,
+          type: metadata.type,
+          content
+        });
+        setIsPasswordVerified(true);
+      }
     }
+    
+    return isCorrect;
   };
 
   const handleDownload = () => {
@@ -120,15 +105,9 @@ const FileView = () => {
   };
 
   const handleReport = async (fileId: string, reason: string): Promise<void> => {
-    try {
-      const success = await reportFile(fileId, reason);
-      if (!success) {
-        throw new Error("Failed to report file");
-      }
-      toast.success("Fichier signalé avec succès");
-    } catch (error) {
-      toast.error("Erreur lors du signalement du fichier");
-      console.error("Error reporting file:", error);
+    const success = reportFile(fileId, reason);
+    if (!success) {
+      throw new Error("Failed to report file");
     }
   };
 

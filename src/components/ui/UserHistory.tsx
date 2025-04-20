@@ -36,32 +36,21 @@ export function UserHistory() {
   const [history, setHistory] = useState<UserUploadHistory[]>([]);
   const [selectedFile, setSelectedFile] = useState<UserUploadHistory | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     loadHistory();
   }, []);
 
-  const loadHistory = async () => {
-    setIsLoading(true);
-    try {
-      // Now we properly await the async function
-      const uploads = await getUserUploads();
-      setHistory(uploads.sort((a, b) => 
-        new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime()
-      ));
-    } catch (error) {
-      console.error('Error loading history:', error);
-      toast.error('Erreur lors du chargement de l\'historique');
-    } finally {
-      setIsLoading(false);
-    }
+  const loadHistory = () => {
+    const uploads = getUserUploads();
+    setHistory(uploads.sort((a, b) => 
+      new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime()
+    ));
   };
 
-  const handleDeleteFile = async (fileId: string) => {
+  const handleDeleteFile = (fileId: string) => {
     if (window.confirm('Êtes-vous sûr de vouloir supprimer ce fichier ?')) {
-      // Now properly await the async function
-      const success = await deleteFile(fileId);
+      const success = deleteFile(fileId);
       if (success) {
         toast.success('Fichier supprimé avec succès');
         loadHistory();
@@ -71,9 +60,8 @@ export function UserHistory() {
     }
   };
 
-  const handleUpdateVisibility = async (fileId: string, visibility: 'public' | 'private') => {
-    // Now properly await the async function
-    const success = await updateFileVisibility(fileId, visibility);
+  const handleUpdateVisibility = (fileId: string, visibility: 'public' | 'private') => {
+    const success = updateFileVisibility(fileId, visibility);
     if (success) {
       toast.success(`Visibilité mise à jour: ${visibility === 'public' ? 'Public' : 'Privé'}`);
       loadHistory();
@@ -82,16 +70,16 @@ export function UserHistory() {
     }
   };
 
-  const handleUpdateOptions = async (options: { expiryDate: Date | null; password: string | null; visibility?: 'public' | 'private'; }) => {
+  const handleUpdateOptions = (options: { expiryDate: Date | null; password: string | null; visibility?: 'public' | 'private'; }) => {
     if (!selectedFile) return;
     
     // Update expiry date
-    const expirySuccess = await updateFileExpiryDate(selectedFile.id, options.expiryDate);
+    const expirySuccess = updateFileExpiryDate(selectedFile.id, options.expiryDate);
     
     // Update visibility if changed
     let visibilitySuccess = true;
     if (options.visibility && options.visibility !== selectedFile.visibility) {
-      visibilitySuccess = await updateFileVisibility(selectedFile.id, options.visibility);
+      visibilitySuccess = updateFileVisibility(selectedFile.id, options.visibility);
     }
     
     if (expirySuccess && visibilitySuccess) {
@@ -113,17 +101,6 @@ export function UserHistory() {
       return <FileText className="h-5 w-5" />;
     return <FileIcon className="h-5 w-5" />;
   };
-
-  if (isLoading) {
-    return (
-      <div className="text-center py-12">
-        <div className="animate-spin mx-auto mb-4">
-          <FileIcon className="h-12 w-12 text-muted-foreground" />
-        </div>
-        <p className="text-muted-foreground">Chargement de l'historique...</p>
-      </div>
-    );
-  }
 
   if (history.length === 0) {
     return (

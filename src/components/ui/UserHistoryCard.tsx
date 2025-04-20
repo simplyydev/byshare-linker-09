@@ -12,8 +12,7 @@ import {
   FileIcon,
   ExternalLink,
   Clock,
-  Lock,
-  RefreshCw
+  Lock
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -27,41 +26,27 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 
 export const UserHistoryCard = () => {
   const [history, setHistory] = useState<UserUploadHistory[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   
   useEffect(() => {
     loadHistory();
   }, []);
 
-  const loadHistory = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const uploads = await getUserUploads();
-      // Only show the most recent 5 uploads
-      setHistory(uploads.slice(0, 5));
-    } catch (err) {
-      console.error('Error loading history:', err);
-      setError('Impossible de charger l\'historique');
-      toast.error('Erreur lors du chargement de l\'historique');
-    } finally {
-      setIsLoading(false);
-    }
+  const loadHistory = () => {
+    const uploads = getUserUploads();
+    // Only show the most recent 5 uploads
+    setHistory(uploads
+      .sort((a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime())
+      .slice(0, 5)
+    );
   };
 
-  const handleDeleteFile = async (fileId: string) => {
+  const handleDeleteFile = (fileId: string) => {
     if (window.confirm('Êtes-vous sûr de vouloir supprimer ce fichier ?')) {
-      try {
-        const success = await deleteFile(fileId);
-        if (success) {
-          toast.success('Fichier supprimé avec succès');
-          loadHistory();
-        } else {
-          toast.error('Erreur lors de la suppression du fichier');
-        }
-      } catch (err) {
-        console.error('Error deleting file:', err);
+      const success = deleteFile(fileId);
+      if (success) {
+        toast.success('Fichier supprimé avec succès');
+        loadHistory();
+      } else {
         toast.error('Erreur lors de la suppression du fichier');
       }
     }
@@ -78,65 +63,8 @@ export const UserHistoryCard = () => {
     return <FileIcon className="h-5 w-5 text-gray-500" />;
   };
 
-  if (isLoading) {
-    return (
-      <Card className="glass">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-lg flex items-center">
-            <Clock className="h-4 w-4 mr-2" />
-            Fichiers récents
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex justify-center py-6">
-          <RefreshCw className="h-6 w-6 animate-spin text-primary" />
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (error) {
-    return (
-      <Card className="glass">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-lg flex items-center">
-            <Clock className="h-4 w-4 mr-2" />
-            Fichiers récents
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-4 text-muted-foreground">
-            {error}
-          </div>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="w-full" 
-            onClick={loadHistory}
-          >
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Réessayer
-          </Button>
-        </CardContent>
-      </Card>
-    );
-  }
-
   if (history.length === 0) {
-    return (
-      <Card className="glass">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-lg flex items-center">
-            <Clock className="h-4 w-4 mr-2" />
-            Fichiers récents
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-4 text-muted-foreground">
-            Aucun fichier récent
-          </div>
-        </CardContent>
-      </Card>
-    );
+    return null;
   }
 
   return (

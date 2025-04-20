@@ -1,6 +1,6 @@
 
 import { UserUploadHistory } from './types';
-import { API_BASE_URL } from './apiConfig';
+import { API_BASE_URL, IS_LOCAL_MODE } from './apiConfig';
 
 // Helper function to generate a unique user ID
 export const getUserId = (): string => {
@@ -13,8 +13,19 @@ export const getUserId = (): string => {
   return userId;
 };
 
-// Get user upload history from server with better error handling
+// Get user upload history from localStorage or server
 export const getUserUploads = async (): Promise<UserUploadHistory[]> => {
+  if (IS_LOCAL_MODE) {
+    try {
+      const userId = getUserId();
+      const uploadsJson = localStorage.getItem(`byshare_uploads_${userId}`);
+      return uploadsJson ? JSON.parse(uploadsJson) : [];
+    } catch (error) {
+      console.error('Error fetching user uploads from localStorage:', error);
+      return [];
+    }
+  }
+  
   try {
     const userId = getUserId();
     const response = await fetch(`${API_BASE_URL}/users/${userId}/uploads`);
@@ -35,6 +46,18 @@ export const getUserUploads = async (): Promise<UserUploadHistory[]> => {
     console.error('Error fetching user uploads:', error);
     // Retourner un tableau vide au lieu de planter
     return [];
+  }
+};
+
+// Save user uploads to localStorage
+export const saveUserUploads = (uploads: UserUploadHistory[]): void => {
+  if (IS_LOCAL_MODE) {
+    try {
+      const userId = getUserId();
+      localStorage.setItem(`byshare_uploads_${userId}`, JSON.stringify(uploads));
+    } catch (error) {
+      console.error('Error saving user uploads to localStorage:', error);
+    }
   }
 };
 
@@ -59,3 +82,4 @@ export const incrementUploadCount = (): void => {
   
   localStorage.setItem(uploadCountKey, (currentCount + 1).toString());
 };
+

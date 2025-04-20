@@ -16,6 +16,7 @@ export interface FileData {
   visibility?: 'public' | 'private'; // Visibility option
   isFolder?: boolean; // Whether this is a folder
   files?: Array<{path: string; name: string; size: number; type: string}>; // Files in folder
+  content?: string; // File content stored as base64 or data URL
 }
 
 // User history type

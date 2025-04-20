@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { FileDropzone } from '@/components/ui/FileDropzone';
@@ -18,6 +17,7 @@ import { FileIcon, Share, Shield, RefreshCw, FolderUp, History } from 'lucide-re
 import { MAX_UPLOADS_PER_DAY } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
 import config from '@/lib/config';
+import { getImports, ImportRecord } from '@/lib/fileService';
 
 const Upload = () => {
   const [file, setFile] = useState<File | null>(null);
@@ -37,8 +37,13 @@ const Upload = () => {
   const [isFolder, setIsFolder] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | undefined>(undefined);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [imports, setImports] = useState<ImportRecord[]>([]);
 
   const { maxSizeMB, acceptedFileTypes } = loadSettings();
+
+  useEffect(() => {
+    setImports(getImports());
+  }, []);
 
   useEffect(() => {
     const count = getUploadCountForToday();
@@ -103,10 +108,8 @@ const Upload = () => {
       let result;
       
       if (isFolder && folderFiles.length > 0) {
-        // Upload folder
         result = await uploadFolder(folderFiles, options, handleUploadProgress);
       } else if (file) {
-        // Upload single file
         result = await uploadFile(file, options, handleUploadProgress);
       } else {
         throw new Error("Aucun fichier à télécharger");
@@ -114,6 +117,7 @@ const Upload = () => {
       
       setFileUrl(result.url);
       setUploadsToday(prev => prev + 1);
+      setImports(getImports());
       toast.success("Fichier téléchargé avec succès!");
     } catch (error) {
       console.error('Upload error:', error);

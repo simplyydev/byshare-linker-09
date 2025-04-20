@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 
 // Local storage keys
 const FILES_STORAGE_KEY = 'byshare_files';
+const IMPORTS_STORAGE_KEY = 'byshare_imports';
 
 // Get files from localStorage
 const getLocalFiles = (): Record<string, FileData> => {
@@ -26,6 +27,43 @@ const saveLocalFiles = (files: Record<string, FileData>): void => {
     localStorage.setItem(FILES_STORAGE_KEY, JSON.stringify(files));
   } catch (error) {
     console.error('Error saving files to localStorage:', error);
+  }
+};
+
+// Get imports from localStorage
+const getLocalImports = (): ImportRecord[] => {
+  try {
+    const importsJson = localStorage.getItem(IMPORTS_STORAGE_KEY);
+    return importsJson ? JSON.parse(importsJson) : [];
+  } catch (error) {
+    console.error('Error getting imports from localStorage:', error);
+    return [];
+  }
+};
+
+// Save imports to localStorage
+const saveLocalImports = (imports: ImportRecord[]): void => {
+  try {
+    localStorage.setItem(IMPORTS_STORAGE_KEY, JSON.stringify(imports));
+  } catch (error) {
+    console.error('Error saving imports to localStorage:', error);
+  }
+};
+
+// Add to imports history
+const addToImports = (file: FileData): void => {
+  try {
+    const imports = getLocalImports();
+    imports.push({
+      id: file.id,
+      fileName: file.name,
+      importDate: new Date().toISOString(),
+      fileSize: file.size,
+      type: file.type
+    });
+    saveLocalImports(imports);
+  } catch (error) {
+    console.error('Error adding to imports:', error);
   }
 };
 
@@ -77,7 +115,7 @@ export const uploadFile = async (
             const files = getLocalFiles();
             
             // Create file data
-            files[fileId] = {
+            const fileData = {
               id: fileId,
               name: file.name,
               size: file.size,
@@ -95,7 +133,9 @@ export const uploadFile = async (
               isFolder: !!file.webkitRelativePath
             };
             
+            files[fileId] = fileData;
             saveLocalFiles(files);
+            addToImports(fileData);
             
             // Add to user uploads
             const uploads = await getUserUploads();
@@ -293,7 +333,7 @@ export const uploadFolder = async (
         });
         
         // Create file data
-        filesByPath[fileId] = {
+        const fileData = {
           id: fileId,
           name: file.name,
           size: file.size,
@@ -310,6 +350,9 @@ export const uploadFolder = async (
           folderPath: file.webkitRelativePath,
           isFolder: true
         };
+        
+        filesByPath[fileId] = fileData;
+        addToImports(fileData);
         
         folderFiles.push({
           path: file.webkitRelativePath,
@@ -894,3 +937,6 @@ export const reportFile = async (id: string, reason: string): Promise<boolean> =
     return false;
   }
 };
+
+// Export the imports functions
+export const getImports = getLocalImports;

@@ -1,4 +1,3 @@
-
 // Type definitions
 export interface FileData {
   id: string;
@@ -37,4 +36,13 @@ export interface UploadProgress {
   loaded: number;
   total: number;
   progress: number;
+}
+
+// New type for tracking imported files
+export interface ImportRecord {
+  id: string;
+  fileName: string;
+  importDate: string;
+  fileSize: number;
+  type: string;
 }

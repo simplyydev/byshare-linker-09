@@ -7,33 +7,13 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/hooks/use-theme";
 import Index from "./pages/Index";
 import Upload from "./pages/Upload";
+import Download from "./pages/Download";
 import FileView from "./pages/FileView";
 import UserHistory from "./pages/UserHistory";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 
-// Initialize service with default settings
-import { loadSettings, saveSettings } from "./lib/fileService";
-
 const queryClient = new QueryClient();
-
-// Initialize settings if they don't exist
-if (!localStorage.getItem('byshare_settings')) {
-  saveSettings({
-    maxSizeMB: 100,
-    acceptedFileTypes: [
-      'image/*',
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'text/plain',
-      'application/zip',
-      'application/x-rar-compressed',
-      'video/*',
-      'audio/*'
-    ]
-  });
-}
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -46,6 +26,7 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/upload" element={<Upload />} />
             <Route path="/files/:id" element={<FileView />} />
+            <Route path="/download/:id" element={<Download />} />
             <Route path="/history" element={<UserHistory />} />
             <Route path="/admin" element={<Admin />} />
             <Route path="*" element={<NotFound />} />

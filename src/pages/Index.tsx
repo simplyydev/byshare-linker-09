@@ -2,14 +2,11 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
-import { Features } from '@/components/Features';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, Sun, Moon, FileUp, Shield, Clock, Link as LinkIcon } from 'lucide-react';
-import { useTheme } from '@/hooks/use-theme';
+import { ServerUploader } from '@/components/ServerUploader';
+import { ArrowRight, Upload, Shield, Clock, Link as LinkIcon } from 'lucide-react';
 
 const Index = () => {
-  const { theme, setTheme } = useTheme();
-
   return (
     <Layout>
       <div className="max-w-5xl mx-auto px-4 py-12">
@@ -18,26 +15,14 @@ const Index = () => {
             By'Share
           </h1>
           <p className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto mb-8">
-            Partagez vos fichiers simplement, gratuitement, sans inscription
+            Partagez vos fichiers sur notre serveur, rapidement et simplement
           </p>
           
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-8">
-            <Button asChild size="lg" className="gap-2 text-lg btn-hover-effect">
-              <Link to="/upload">
-                <FileUp className="h-5 w-5" />
-                Partager un fichier
-                <ArrowRight className="h-5 w-5 ml-1" />
-              </Link>
-            </Button>
-            
-            <Button 
-              variant="outline" 
-              size="lg"
-              className="gap-2 text-lg"
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            >
-              {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-              {theme === 'dark' ? 'Mode clair' : 'Mode sombre'}
+          <div className="mt-8">
+            <Button size="lg" className="gap-2 text-lg btn-hover-effect">
+              <Upload className="h-5 w-5" />
+              Commencer l'upload
+              <ArrowRight className="h-5 w-5 ml-1" />
             </Button>
           </div>
         </div>
@@ -46,11 +31,11 @@ const Index = () => {
           <div className="glass rounded-2xl p-6 transform transition-all hover:scale-105">
             <div className="flex flex-col items-center text-center">
               <div className="h-16 w-16 rounded-full glass-subtle flex items-center justify-center mb-4">
-                <FileUp className="h-8 w-8 text-primary" />
+                <Upload className="h-8 w-8 text-primary" />
               </div>
-              <h3 className="text-xl font-medium mb-2">Simple et Rapide</h3>
+              <h3 className="text-xl font-medium mb-2">Upload Serveur</h3>
               <p className="text-muted-foreground">
-                Partagez vos fichiers en quelques secondes, sans inscription ni configuration compliquée.
+                Vos fichiers sont stockés sur notre serveur pour une meilleure fiabilité et accessibilité.
               </p>
             </div>
           </div>
@@ -80,20 +65,11 @@ const Index = () => {
           </div>
         </div>
 
-        <Features />
-
-        <div className="glass rounded-2xl p-8 text-center mt-16">
-          <h2 className="text-2xl md:text-3xl font-bold mb-4">Propulsé par By-Hoster</h2>
-          <p className="text-lg text-muted-foreground mb-6">
-            By'Share est un service gratuit propulsé par By-Hoster, avec une limite de 5 uploads par jour par IP.
-          </p>
-          <Button asChild size="lg" className="mx-auto btn-hover-effect">
-            <Link to="/upload">
-              Commencer à partager
-              <ArrowRight className="h-5 w-5 ml-2" />
-            </Link>
-          </Button>
+        <div className="glass rounded-2xl p-8">
+          <h2 className="text-2xl font-bold mb-6">Partager un fichier</h2>
+          <ServerUploader />
         </div>
+
       </div>
     </Layout>
   );

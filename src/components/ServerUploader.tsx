@@ -11,15 +11,19 @@ import {
   AlertCircle, 
   Loader2, 
   Copy, 
-  Link as LinkIcon 
+  Link as LinkIcon,
+  Download,
+  ImportIcon
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { 
   uploadFileToServer, 
   ServerFile, 
   subscribeToUploadProgress, 
-  subscribeToStatusChange 
+  subscribeToStatusChange,
+  importFromLocalStorage 
 } from '@/lib/serverUploadService';
+import { getUserUploads } from '@/lib/fileService';
 
 interface ServerUploaderProps {
   maxSizeMB?: number;
@@ -38,8 +42,18 @@ export function ServerUploader({
   const [password, setPassword] = useState<string>('');
   const [expiryDays, setExpiryDays] = useState<number>(7);
   const [shareUrl, setShareUrl] = useState<string>('');
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [userFiles, setUserFiles] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
+
+  // Charger les fichiers de l'utilisateur pour l'importation
+  useEffect(() => {
+    if (showImportModal) {
+      setUserFiles(getUserUploads());
+    }
+  }, [showImportModal]);
 
   // Gérer la sélection de fichier
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -108,6 +122,38 @@ export function ServerUploader({
     }
   };
 
+  // Importer un fichier depuis localStorage vers le serveur
+  const handleImport = async (fileId: string) => {
+    setIsImporting(true);
+    
+    try {
+      const result = await importFromLocalStorage(fileId, { 
+        expiryDays: expiryDays,
+        password: password.length > 0 ? password : null
+      });
+      
+      if (result) {
+        setServerFile(result);
+        
+        // Générer l'URL de partage
+        const baseUrl = window.location.origin;
+        const url = `${baseUrl}/download/${result.id}`;
+        setShareUrl(url);
+        
+        setShowImportModal(false);
+        toast.success('Fichier importé avec succès!');
+        setUploadStatus('ready');
+      } else {
+        toast.error('Erreur lors de l\'importation du fichier.');
+      }
+    } catch (error) {
+      console.error('Erreur lors de l\'importation:', error);
+      toast.error('Une erreur est survenue lors de l\'importation du fichier.');
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   // S'abonner aux mises à jour de progression
   useEffect(() => {
     if (!isUploading) return;
@@ -153,38 +199,110 @@ export function ServerUploader({
     return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
   };
 
+  // Modal d'importation de fichiers
+  const renderImportModal = () => {
+    if (!showImportModal) return null;
+    
+    return (
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+        <div className="bg-background rounded-xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+          <h3 className="text-xl font-bold mb-4">Importer depuis l'historique local</h3>
+          
+          {userFiles.length === 0 ? (
+            <p className="text-center py-8 text-muted-foreground">Aucun fichier trouvé dans l'historique local</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {userFiles.map(file => (
+                <div key={file.id} className="glass rounded-lg p-4 hover:shadow-md transition-all">
+                  <div className="flex items-start gap-3">
+                    <div className="h-10 w-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                      <FileIcon className="h-5 w-5 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{file.fileName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatFileSize(file.fileSize)}
+                      </p>
+                      <div className="mt-2">
+                        <Button 
+                          size="sm" 
+                          onClick={() => handleImport(file.id)}
+                          disabled={isImporting}
+                          className="w-full"
+                        >
+                          {isImporting ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <ImportIcon className="h-4 w-4 mr-2" />
+                          )}
+                          Importer
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          
+          <div className="flex justify-end mt-6 space-x-3">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowImportModal(false)}
+            >
+              Fermer
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* Interface de sélection de fichier */}
       {!selectedFile && !serverFile && (
-        <div 
-          className="border-2 border-dashed border-primary/30 rounded-xl p-10 text-center 
-          cursor-pointer hover:border-primary/60 transition-all"
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <div className="flex flex-col items-center">
-            <div className="h-16 w-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-              <Upload className="h-8 w-8 text-primary" />
-            </div>
-            <h3 className="text-xl font-medium mb-2">Déposez votre fichier ici</h3>
-            <p className="text-muted-foreground mb-4">
-              ou cliquez pour sélectionner un fichier
-            </p>
-            <Button variant="outline">Sélectionner un fichier</Button>
-            
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              onChange={handleFileSelect}
-              accept={acceptedFileTypes.join(',')}
-            />
-            
-            <p className="text-xs text-muted-foreground mt-4">
-              Taille maximale: {maxSizeMB}MB
-            </p>
+        <>
+          <div className="flex justify-between items-center mb-4">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowImportModal(true)}
+              className="gap-2"
+            >
+              <ImportIcon className="h-4 w-4" />
+              Importer depuis l'historique local
+            </Button>
           </div>
-        </div>
+          
+          <div 
+            className="border-2 border-dashed border-primary/30 rounded-xl p-10 text-center 
+            cursor-pointer hover:border-primary/60 transition-all"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <div className="flex flex-col items-center">
+              <div className="h-16 w-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+                <Upload className="h-8 w-8 text-primary" />
+              </div>
+              <h3 className="text-xl font-medium mb-2">Déposez votre fichier ici</h3>
+              <p className="text-muted-foreground mb-4">
+                ou cliquez pour sélectionner un fichier
+              </p>
+              <Button variant="outline">Sélectionner un fichier</Button>
+              
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                onChange={handleFileSelect}
+                accept={acceptedFileTypes.join(',')}
+              />
+              
+              <p className="text-xs text-muted-foreground mt-4">
+                Taille maximale: {maxSizeMB}MB
+              </p>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Affichage du fichier sélectionné */}
@@ -352,6 +470,8 @@ export function ServerUploader({
           </div>
         </Card>
       )}
+
+      {renderImportModal()}
     </div>
   );
 }

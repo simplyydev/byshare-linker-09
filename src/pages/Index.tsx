@@ -1,12 +1,24 @@
 
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { ServerUploader } from '@/components/ServerUploader';
 import { ArrowRight, Upload, Shield, Clock, Link as LinkIcon } from 'lucide-react';
 
 const Index = () => {
+  const navigate = useNavigate();
+
+  const handleStartUpload = () => {
+    // Faire défiler vers la section d'upload ou naviguer vers la page d'upload
+    const uploadSection = document.getElementById('upload-section');
+    if (uploadSection) {
+      uploadSection.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      navigate('/upload');
+    }
+  };
+
   return (
     <Layout>
       <div className="max-w-5xl mx-auto px-4 py-12">
@@ -19,7 +31,11 @@ const Index = () => {
           </p>
           
           <div className="mt-8">
-            <Button size="lg" className="gap-2 text-lg btn-hover-effect">
+            <Button 
+              size="lg" 
+              className="gap-2 text-lg btn-hover-effect"
+              onClick={handleStartUpload}
+            >
               <Upload className="h-5 w-5" />
               Commencer l'upload
               <ArrowRight className="h-5 w-5 ml-1" />
@@ -65,7 +81,7 @@ const Index = () => {
           </div>
         </div>
 
-        <div className="glass rounded-2xl p-8">
+        <div id="upload-section" className="glass rounded-2xl p-8">
           <h2 className="text-2xl font-bold mb-6">Partager un fichier</h2>
           <ServerUploader />
         </div>

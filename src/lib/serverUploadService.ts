@@ -1,6 +1,8 @@
 
 // Ce service simule l'upload de fichiers vers un serveur plutôt que de les stocker dans le localStorage
 
+import { getFileContent, getFileMetadata } from './fileService';
+
 // Types
 export interface ServerFile {
   id: string;
@@ -93,6 +95,64 @@ export const uploadFileToServer = (
         }, 1500); // Simuler un temps de traitement serveur
       }
     }, 50); // Mettre à jour la progression toutes les 50ms
+  });
+};
+
+// Importer un fichier depuis localStorage vers le serveur
+export const importFromLocalStorage = async (
+  fileId: string, 
+  options: UploadOptions = {}
+): Promise<ServerFile | null> => {
+  return new Promise((resolve, reject) => {
+    // Récupérer les données du fichier depuis localStorage
+    const fileMetadata = getFileMetadata(fileId);
+    const fileContent = getFileContent(fileId);
+    
+    if (!fileMetadata || !fileContent) {
+      reject(new Error("Fichier non trouvé dans le stockage local"));
+      return;
+    }
+    
+    // Créer un nouvel objet ServeurFile
+    const serverFile: ServerFile = {
+      id: generateId(), // Nouveau ID sur le serveur
+      name: fileMetadata.name,
+      size: fileMetadata.size,
+      type: fileMetadata.type,
+      uploadDate: new Date().toISOString(),
+      expiryDate: options.expiryDays 
+        ? new Date(Date.now() + options.expiryDays * 24 * 60 * 60 * 1000).toISOString() 
+        : null,
+      downloadUrl: '',
+      password: options.password || null,
+      status: 'processing'
+    };
+    
+    // Notifier les écouteurs du statut
+    const processingEvent = new CustomEvent('uploadStatusChange', {
+      detail: { fileId: serverFile.id, status: 'processing' }
+    });
+    window.dispatchEvent(processingEvent);
+    
+    // Simuler un traitement serveur
+    setTimeout(() => {
+      // L'importation est terminée
+      serverFile.status = 'ready';
+      serverFile.downloadUrl = `/download/${serverFile.id}`;
+      
+      // Sauvegarder dans la "base de données" côté serveur
+      const uploads = getUploadsFromServer();
+      uploads.push(serverFile);
+      saveUploadsToServer(uploads);
+      
+      // Notifier que le fichier est prêt
+      const readyEvent = new CustomEvent('uploadStatusChange', {
+        detail: { fileId: serverFile.id, status: 'ready' }
+      });
+      window.dispatchEvent(readyEvent);
+      
+      resolve(serverFile);
+    }, 1200);
   });
 };
 

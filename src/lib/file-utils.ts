@@ -5,8 +5,9 @@
  * Get the appropriate file icon based on file type
  */
 import { Image, File as FileIcon, Film, Music, Archive, FileText } from 'lucide-react';
+import React from 'react';
 
-export const getFileIcon = (fileType: string) => {
+export const getFileIcon = (fileType: string): React.ReactNode => {
   if (fileType.startsWith('image/')) return <Image className="h-10 w-10 text-primary" />;
   if (fileType.startsWith('video/')) return <Film className="h-10 w-10 text-primary" />;
   if (fileType.startsWith('audio/')) return <Music className="h-10 w-10 text-primary" />;
@@ -21,8 +22,9 @@ export const getFileIcon = (fileType: string) => {
  * Format file size to human-readable format
  */
 export const formatFileSize = (bytes: number): string => {
+  if (bytes < 1024) return bytes + ' B';
   if (bytes < 1024 * 1024) {
-    return (bytes / 1024).toFixed(2) + ' MB';
+    return (bytes / 1024).toFixed(2) + ' KB';
   }
   return (bytes / 1024 / 1024).toFixed(2) + ' MB';
 };

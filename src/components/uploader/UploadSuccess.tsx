@@ -1,10 +1,8 @@
-
 import { CheckCircle, Clock, Copy } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import type { ServerFile } from '@/lib/serverUploadService';
-import { getAbsoluteDownloadUrl } from '@/lib/serverUploadService';
+import { ServerFile, getAbsoluteDownloadUrl } from '@/lib/serverUploadService';
 
 interface UploadSuccessProps {
   serverFile: ServerFile;

@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import type { ServerFile } from '@/lib/serverUploadService';
+import { getAbsoluteDownloadUrl } from '@/lib/serverUploadService';
 
 interface UploadSuccessProps {
   serverFile: ServerFile;
@@ -13,8 +14,13 @@ interface UploadSuccessProps {
 }
 
 export function UploadSuccess({ serverFile, shareUrl, expiryDays, onReset }: UploadSuccessProps) {
+  // Assurer que l'URL est absolue
+  const absoluteShareUrl = shareUrl.startsWith('http') 
+    ? shareUrl 
+    : getAbsoluteDownloadUrl(serverFile.id);
+
   const copyShareLink = () => {
-    navigator.clipboard.writeText(shareUrl);
+    navigator.clipboard.writeText(absoluteShareUrl);
     toast.success('Lien copié dans le presse-papier');
   };
 
@@ -34,7 +40,7 @@ export function UploadSuccess({ serverFile, shareUrl, expiryDays, onReset }: Upl
         
         <div className="flex items-center">
           <div className="flex-1 bg-muted p-3 rounded-l-md truncate text-sm">
-            {shareUrl}
+            {absoluteShareUrl}
           </div>
           <button 
             className="bg-primary text-primary-foreground p-3 rounded-r-md hover:bg-primary/90"

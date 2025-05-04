@@ -14,9 +14,14 @@ export function FileLink({ fileUrl, className }: FileLinkProps) {
   const [copied, setCopied] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   
+  // Assurez-vous que l'URL est absolue pour fonctionner dans tous les navigateurs
+  const absoluteUrl = fileUrl.startsWith('http') 
+    ? fileUrl 
+    : `${window.location.origin}${fileUrl.startsWith('/') ? '' : '/'}${fileUrl}`;
+  
   const handleCopy = () => {
     if (inputRef.current) {
-      navigator.clipboard.writeText(inputRef.current.value)
+      navigator.clipboard.writeText(absoluteUrl)
         .then(() => {
           setCopied(true);
           toast.success("Lien copié dans le presse-papier");
@@ -45,7 +50,7 @@ export function FileLink({ fileUrl, className }: FileLinkProps) {
           <input
             ref={inputRef}
             type="text"
-            value={fileUrl}
+            value={absoluteUrl}
             readOnly
             onClick={handleInputClick}
             className="w-full glass-subtle text-sm p-4 pr-12 rounded-lg border-none outline-none focus:ring-2 focus:ring-primary/20"

@@ -1,4 +1,3 @@
-
 // Ce service simule l'upload de fichiers vers un serveur plutôt que de les stocker dans le localStorage
 
 import { getFileContent, getFileMetadata } from './fileService';
@@ -26,6 +25,11 @@ interface UploadOptions {
 const generateId = (): string => {
   return Math.random().toString(36).substring(2, 15) + 
          Math.random().toString(36).substring(2, 15);
+};
+
+// Générer une URL absolue pour le téléchargement
+export const getAbsoluteDownloadUrl = (fileId: string): string => {
+  return `${window.location.origin}/download/${fileId}`;
 };
 
 // Simuler l'upload d'un fichier sur un serveur avec progression
@@ -78,7 +82,7 @@ export const uploadFileToServer = (
         setTimeout(() => {
           // L'upload est terminé
           serverFile.status = 'ready';
-          serverFile.downloadUrl = `/download/${serverFile.id}`;
+          serverFile.downloadUrl = getAbsoluteDownloadUrl(serverFile.id);
           
           // Sauvegarder dans une "base de données" côté serveur (simulé avec sessionStorage)
           const uploads = getUploadsFromServer();

@@ -6,9 +6,11 @@ import {
   uploadFileToServer, 
   subscribeToUploadProgress, 
   subscribeToStatusChange,
-  importFromLocalStorage 
+  importFromLocalStorage,
+  getUploadsCountForToday
 } from '@/lib/serverUploadService';
 import { getUserUploads } from '@/lib/fileService';
+import { MAX_UPLOADS_PER_DAY } from '@/lib/constants';
 
 export function useServerUpload(maxSizeMB = 500) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -22,12 +24,16 @@ export function useServerUpload(maxSizeMB = 500) {
   const [showImportModal, setShowImportModal] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [userFiles, setUserFiles] = useState<any[]>([]);
+  const [uploadsToday, setUploadsToday] = useState(0);
 
-  // Load user files for import
+  // Load user files for import and get upload count
   useEffect(() => {
     if (showImportModal) {
       setUserFiles(getUserUploads());
     }
+    
+    // Get current uploads count
+    setUploadsToday(getUploadsCountForToday());
   }, [showImportModal]);
 
   // Subscribe to upload events
@@ -63,9 +69,19 @@ export function useServerUpload(maxSizeMB = 500) {
     setShareUrl('');
   };
 
+  // Check if upload limit reached
+  const isUploadLimitReached = () => {
+    return uploadsToday >= MAX_UPLOADS_PER_DAY;
+  };
+
   // Upload file to server
   const handleUpload = async () => {
     if (!selectedFile) return;
+    
+    if (isUploadLimitReached()) {
+      toast.error(`Limite de ${MAX_UPLOADS_PER_DAY} téléchargements par jour atteinte. Réessayez demain.`);
+      return;
+    }
 
     setIsUploading(true);
     setUploadStatus('uploading');
@@ -84,6 +100,9 @@ export function useServerUpload(maxSizeMB = 500) {
       const url = `${baseUrl}/download/${uploaded.id}`;
       setShareUrl(url);
       
+      // Update uploads count
+      setUploadsToday(getUploadsCountForToday());
+      
       toast.success('Fichier uploadé avec succès!');
     } catch (error) {
       console.error('Erreur lors de l\'upload:', error);
@@ -96,6 +115,11 @@ export function useServerUpload(maxSizeMB = 500) {
 
   // Import file from localStorage
   const handleImport = async (fileId: string) => {
+    if (isUploadLimitReached()) {
+      toast.error(`Limite de ${MAX_UPLOADS_PER_DAY} téléchargements par jour atteinte. Réessayez demain.`);
+      return;
+    }
+    
     setIsImporting(true);
     
     try {
@@ -115,6 +139,9 @@ export function useServerUpload(maxSizeMB = 500) {
         setShowImportModal(false);
         toast.success('Fichier importé avec succès!');
         setUploadStatus('ready');
+        
+        // Update uploads count
+        setUploadsToday(getUploadsCountForToday());
       } else {
         toast.error('Erreur lors de l\'importation du fichier.');
       }
@@ -154,6 +181,7 @@ export function useServerUpload(maxSizeMB = 500) {
     showImportModal,
     isImporting,
     userFiles,
+    uploadsToday,
     handleFileSelect,
     handleUpload,
     handleImport,

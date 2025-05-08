@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { ImportIcon, FileIcon, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -9,9 +10,17 @@ interface ImportModalProps {
   userFiles: any[];
   onImport: (fileId: string) => void;
   isImporting: boolean;
+  disabled?: boolean;
 }
 
-export function ImportModal({ isOpen, onClose, userFiles, onImport, isImporting }: ImportModalProps) {
+export function ImportModal({ 
+  isOpen, 
+  onClose, 
+  userFiles, 
+  onImport, 
+  isImporting, 
+  disabled = false 
+}: ImportModalProps) {
   if (!isOpen) return null;
   
   // Formater la taille du fichier
@@ -26,6 +35,12 @@ export function ImportModal({ isOpen, onClose, userFiles, onImport, isImporting 
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
       <div className="bg-background rounded-xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
         <h3 className="text-xl font-bold mb-4">Importer depuis l'historique local</h3>
+        
+        {disabled && (
+          <div className="bg-destructive/10 text-destructive p-4 rounded-lg mb-4">
+            Vous avez atteint la limite de téléchargements pour aujourd'hui.
+          </div>
+        )}
         
         {userFiles.length === 0 ? (
           <p className="text-center py-8 text-muted-foreground">Aucun fichier trouvé dans l'historique local</p>
@@ -46,8 +61,8 @@ export function ImportModal({ isOpen, onClose, userFiles, onImport, isImporting 
                       <Button 
                         size="sm" 
                         onClick={() => onImport(file.id)}
-                        disabled={isImporting}
-                        className="w-full"
+                        disabled={isImporting || disabled}
+                        className={cn("w-full", disabled && "cursor-not-allowed opacity-50")}
                       >
                         {isImporting ? (
                           <Loader2 className="h-4 w-4 mr-2 animate-spin" />

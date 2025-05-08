@@ -12,6 +12,7 @@ export interface ServerFile {
   password: string | null;
   uploadProgress?: number;
   status: 'uploading' | 'processing' | 'ready' | 'error';
+  filePath?: string; // Path to file on server
 }
 
 export interface UploadOptions {

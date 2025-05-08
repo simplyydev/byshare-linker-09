@@ -10,9 +10,10 @@ interface FileDetailsProps {
   onCancel: () => void;
   onOptionsChange: (options: { password: string | null; expiryDays: number }) => void;
   isUploading: boolean;
+  disabled?: boolean;
 }
 
-export function FileDetails({ file, onUpload, onCancel, onOptionsChange, isUploading }: FileDetailsProps) {
+export function FileDetails({ file, onUpload, onCancel, onOptionsChange, isUploading, disabled = false }: FileDetailsProps) {
   // Formater la taille du fichier
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return bytes + ' B';
@@ -41,8 +42,11 @@ export function FileDetails({ file, onUpload, onCancel, onOptionsChange, isUploa
               <Button variant="outline" onClick={onCancel} disabled={isUploading}>
                 Annuler
               </Button>
-              <Button onClick={onUpload} disabled={isUploading}>
-                Uploader
+              <Button 
+                onClick={onUpload} 
+                disabled={isUploading || disabled}
+              >
+                {disabled ? "Limite atteinte" : "Uploader"}
               </Button>
             </div>
           </div>

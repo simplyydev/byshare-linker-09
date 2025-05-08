@@ -8,11 +8,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   getAllFiles, 
   getTotalStorageUsage, 
-  deleteFile, 
-  loadSettings, 
-  saveSettings,
+  deleteFile,
   verifyAdminCredentials
 } from '@/lib/fileService';
+import { 
+  updateMaxFileSizeSetting, 
+  addAcceptedFileType,
+  removeAcceptedFileType,
+  getCurrentSettings
+} from '@/lib/admin/settingsManager';
 import { toast } from 'sonner';
 import { 
   FileText, 
@@ -65,7 +69,11 @@ const Admin = () => {
     const allFiles = getAllFiles();
     setFiles(allFiles);
     setTotalSize(getTotalStorageUsage());
-    setSettings(loadSettings());
+    
+    // Load current settings
+    const currentSettings = getCurrentSettings();
+    setSettings(currentSettings);
+    
     setIsLoading(false);
   };
 
@@ -91,8 +99,8 @@ const Admin = () => {
   };
 
   const handleSaveSettings = () => {
-    saveSettings(settings);
-    toast.success('Paramètres enregistrés avec succès');
+    updateMaxFileSizeSetting(settings.maxSizeMB);
+    loadData(); // Refresh data
   };
 
   const handleAddFileType = () => {
@@ -101,19 +109,16 @@ const Admin = () => {
       return;
     }
     
-    setSettings(prev => ({
-      ...prev,
-      acceptedFileTypes: [...prev.acceptedFileTypes, newFileType.trim()]
-    }));
-    
-    setNewFileType('');
+    if (addAcceptedFileType(newFileType.trim())) {
+      loadData(); // Refresh settings
+      setNewFileType('');
+    }
   };
 
   const handleRemoveFileType = (type: string) => {
-    setSettings(prev => ({
-      ...prev,
-      acceptedFileTypes: prev.acceptedFileTypes.filter(t => t !== type)
-    }));
+    if (removeAcceptedFileType(type)) {
+      loadData(); // Refresh settings
+    }
   };
 
   const handleLogin = () => {
@@ -419,7 +424,8 @@ const Admin = () => {
                         <span className="text-sm">{type}</span>
                         <button
                           onClick={() => handleRemoveFileType(type)}
-                          className="ml-2 text-primary hover:text-primary/80"
+                          className="ml-2 hover:text-destructive"
+                          aria-label="Supprimer le type"
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -429,19 +435,23 @@ const Admin = () => {
                   
                   <div className="flex gap-2 max-w-md">
                     <Input
+                      type="text"
+                      placeholder="Ajouter un type (ex: image/png)"
                       value={newFileType}
                       onChange={(e) => setNewFileType(e.target.value)}
-                      placeholder="Ex: image/*, .pdf, audio/*"
                       className="glass-subtle"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddFileType();
+                        }
+                      }}
                     />
                     <Button onClick={handleAddFileType}>Ajouter</Button>
                   </div>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Vous pouvez ajouter des types MIME (ex: image/*) ou des extensions (ex: .pdf)
-                  </p>
                 </div>
                 
-                <Button onClick={handleSaveSettings} className="btn-hover-effect">
+                <Button onClick={handleSaveSettings} className="mt-6">
                   Enregistrer les paramètres
                 </Button>
               </div>

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -23,6 +22,7 @@ import {
 } from '@/lib/fileService';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { getFileIcon } from '@/lib/file-utils';
 
 export const UserHistoryCard = () => {
   const [history, setHistory] = useState<UserUploadHistory[]>([]);

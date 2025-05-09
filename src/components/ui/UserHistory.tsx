@@ -20,6 +20,7 @@ import {
   Settings
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { getFileIcon } from '@/lib/file-utils';
 
 import { 
   getUserUploads, 
